@@ -5,6 +5,11 @@ import (
 	"github.com/antihax/goesi/esi"
 )
 
+type charge struct {
+	TypeID   int32
+	Location uint8
+}
+
 // GetAttributesFromKillmail takes an ESI killmail and returns the attributes
 func (c *Axiom) GetAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmailHashOk) error {
 	// setup dogma context
@@ -25,12 +30,19 @@ func (c *Axiom) GetAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmail
 		if isFitted(item.Flag) {
 			// sum the quantity of items
 			q := item.QuantityDestroyed + item.QuantityDropped
-			for q {
-				ctx.AddModule(item.ItemTypeId)
+			for q > 0 {
+				loc, err := ctx.AddModule(uint32(item.ItemTypeId))
+				// this is probably ammo or a charge
+				if err != nil {
+
+				}
+
 				q--
 			}
 		}
 	}
+
+	return nil
 }
 
 func isFitted(location int32) bool {
@@ -62,7 +74,33 @@ func isFitted(location int32) bool {
 		32, // HiSlot6
 		33, // HiSlot7
 		34, // HiSlot8
+
+		92, // RigSlot0
+		93, // RigSlot1
+		94, // RigSlot2
+		95, // RigSlot3
+		96, // RigSlot4
+		97, // RigSlot5
+		98, // RigSlot6
+		99, // RigSlot7
+
+		125, // SubSystemSlot0
+		126, // SubSystemSlot0
+		127, // SubSystemSlot0
+		128, // SubSystemSlot0
+		129, // SubSystemSlot0
+		130, // SubSystemSlot0
+		131, // SubSystemSlot0
+		132, // SubSystemSlot0
+
+		159, // FighterTube0
+		160, // FighterTube1
+		161, // FighterTube2
+		162, // FighterTube3
+		163, // FighterTube4
+
 	} {
+
 		if n == location {
 			return true
 		}
