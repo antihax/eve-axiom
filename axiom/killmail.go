@@ -5,11 +5,6 @@ import (
 	"github.com/antihax/goesi/esi"
 )
 
-type charge struct {
-	TypeID   int32
-	Location uint8
-}
-
 // GetAttributesFromKillmail takes an ESI killmail and returns the attributes
 func (c *Axiom) GetAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmailHashOk) error {
 	// setup dogma context
@@ -25,19 +20,40 @@ func (c *Axiom) GetAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmail
 		return err
 	}
 
-	// loop all items on the lost ship and add to the context
+	// Store modules and charges
+	modules := make(map[int32]uint32)
+	charges := make(map[int32]uint32)
+
+	// loop all items on the lost ship, adding drones, and first pass to find modules and charges
 	for _, item := range km.Victim.Items {
 		if isFitted(item.Flag) {
-			// sum the quantity of items
-			q := item.QuantityDestroyed + item.QuantityDropped
-			for q > 0 {
-				loc, err := ctx.AddModule(uint32(item.ItemTypeId))
-				// this is probably ammo or a charge
+			typeID := uint32(item.ItemTypeId)
+			catID := ctx.GetCategory(typeID)
+			if catID == 8 { // Charge
+				charges[item.Flag] = typeID
+			} else if catID == 18 { // Drone
+				q := uint32(item.QuantityDestroyed + item.QuantityDropped)
+				err := ctx.AddDrone(typeID, q)
 				if err != nil {
-
+					return err
 				}
+			} else {
+				modules[item.Flag] = typeID
+			}
+		}
+	}
 
-				q--
+	// Second pass with modules and loaded charges
+	for i := range modules {
+		if _, ok := charges[i]; ok {
+			_, err := ctx.AddModuleAndCharge(modules[i], charges[i])
+			if err != nil {
+				return err
+			}
+		} else {
+			_, err := ctx.AddModule(modules[i])
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -47,7 +63,8 @@ func (c *Axiom) GetAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmail
 
 func isFitted(location int32) bool {
 	for _, n := range []int32{
-		//87, // Drone Bay
+		87, // Drone Bay
+
 		11, // LoSlot0
 		12, // LoSlot1
 		13, // LoSlot2
