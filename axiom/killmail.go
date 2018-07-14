@@ -58,6 +58,26 @@ func (c *Axiom) GetAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmail
 		}
 	}
 
+	c.GetAttributesFromContext(ctx)
+
+	return nil
+}
+
+func (c *Axiom) GetAttributesFromContext(ctx *dogma.Context) error {
+
+	/*cpu, err := ctx.CPULeft()
+	if err != nil {
+		return err
+	}
+	fmt.Println("CPU: ", cpu)
+
+	pg, err := ctx.PowerLeft()
+	if err != nil {
+		return err
+	}
+	fmt.Println("Pg: ", pg)*/
+
+	ctx.GetShipAttributes()
 	return nil
 }
 
