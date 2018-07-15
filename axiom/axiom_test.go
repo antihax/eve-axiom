@@ -14,9 +14,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestKillmails(t *testing.T) {
-	axiom := NewAxiom()
+func TestAxiom(t *testing.T) {
+	// Setup and run the axiom server
+	axiomServer := NewAxiom()
+	axiomServer.RunServer()
 
+	// Create a new API client
+	a, err := NewAxiomAPIClient("localhost:3003")
+	assert.Nil(t, err)
+
+	// Loop through our test data
 	ls, err := ioutil.ReadDir("../json/")
 	assert.Nil(t, err)
 	wg := sync.WaitGroup{}
@@ -28,14 +35,15 @@ func TestKillmails(t *testing.T) {
 		go func(k esi.GetKillmailsKillmailIdKillmailHashOk, f os.FileInfo) {
 			wg.Add(1)
 			defer wg.Done()
-			_, err = axiom.getAttributesFromKillmail(&k)
+			ret, err := a.GetKillmailAttributes(&k)
 			if err != nil && strings.Contains(err.Error(), "Abyssal") {
 				os.Remove("../json/" + f.Name())
 				log.Println("removing abyssal fitted ../json/" + f.Name())
 			} else {
 				assert.Nil(t, err)
 			}
+			assert.NotNil(t, ret)
 		}(k, f)
 	}
-	wg.Done()
+	wg.Wait()
 }
