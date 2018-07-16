@@ -1,46 +1,35 @@
 package axiom
 
 import (
-	"context"
 	"encoding/json"
+	"log"
+	"net/http"
 
 	"github.com/antihax/goesi/esi"
-	"google.golang.org/grpc"
 )
 
-// AxiomPlan API interface
-type AxiomPlan interface {
-	GetKillmailAttributes(ctx context.Context, t *esi.GetKillmailsKillmailIdKillmailHashOk) (*string, error)
-}
-
-var serviceDesc = grpc.ServiceDesc{
-	ServiceName: "Axiom",
-	HandlerType: (*AxiomPlan)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "GetKillmailAttributes",
-			Handler:    GetKillmailAttributesHandler,
-		},
-	},
-}
-
-func GetKillmailAttributesHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(esi.GetKillmailsKillmailIdKillmailHashOk)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	return srv.(*Axiom).GetKillmailAttributes(ctx, in)
-}
-
-// GetKillmailAttributes converts ESI killmail into attributes via dogma parser
-func (s Axiom) GetKillmailAttributes(ctx context.Context, km *esi.GetKillmailsKillmailIdKillmailHashOk) (*string, error) {
-	attr, err := s.getAttributesFromKillmail(km)
+func (s *Axiom) killmailHandler(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	var v esi.GetKillmailsKillmailIdKillmailHashOk
+	err := decoder.Decode(&v)
 	if err != nil {
-		return nil, err
+		log.Println(err)
+		http.Error(w, `{"error":"400", "description":"invalid ESI killmail format"}`, http.StatusBadRequest)
+		return
 	}
 
-	jsonb, err := json.Marshal(attr)
-	json := string(jsonb)
+	km, err := s.getAttributesFromKillmail(&v)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, `{"error":"500", "description":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
 
-	return &json, err
+	json, err := json.Marshal(km)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, `{"error":"500", "description":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+	w.Write(json)
 }
