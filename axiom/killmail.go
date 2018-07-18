@@ -3,7 +3,7 @@ package axiom
 import (
 	"errors"
 
-	dogma "github.com/antihax/go-dogma"
+	"github.com/antihax/eve-axiom/dogma"
 	"github.com/antihax/goesi/esi"
 )
 
