@@ -7,7 +7,6 @@ services:
 
 before_install:
   - ./prereq.sh
-  - go test
 
 after_success:
   - ./test.sh
