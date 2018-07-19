@@ -12,10 +12,8 @@ cd judy-1.0.5
 ./configure
 make
 make install
-make clean
 cd ../libdogma
 ./configure
 make
 make install
-make clean
 cd ../../
