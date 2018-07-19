@@ -11,8 +11,12 @@ cd judy-1.0.5
 ./configure
 make
 sudo make install
-cd ../libdogma
+
+cd ..
+cd libdogma-1.2.1
 ./configure
 make
 sudo make install
-cd ../../
+
+cd ..
+cd ..
