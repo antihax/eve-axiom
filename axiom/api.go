@@ -13,7 +13,6 @@ func (s *Axiom) killmailHandler(w http.ResponseWriter, r *http.Request) {
 	var v esi.GetKillmailsKillmailIdKillmailHashOk
 	err := decoder.Decode(&v)
 	if err != nil {
-		log.Println(err)
 		http.Error(w, `{"error":"400", "description":"invalid ESI killmail format"}`, http.StatusBadRequest)
 		return
 	}

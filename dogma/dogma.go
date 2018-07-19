@@ -1,7 +1,7 @@
 package dogma
 
 /*
- #cgo LDFLAGS: -ldogma
+ #cgo LDFLAGS: -ldogma -lJudy -lm
  #include <dogma.h>
  #include <dogma-extra.h>
 

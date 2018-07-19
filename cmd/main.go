@@ -15,13 +15,14 @@ import (
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetPrefix("eve-axiom: ")
-
+	log.Println("starting eve-axiom")
 	axiom := axiom.NewAxiom()
 	go axiom.RunServer()
 
 	// Run metrics
 	http.Handle("/metrics", promhttp.Handler())
 
+	log.Println("started eve-axiom")
 	go log.Fatalln(http.ListenAndServe(":3000", nil))
 
 	// Handle SIGINT and SIGTERM.

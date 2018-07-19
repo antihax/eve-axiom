@@ -50,7 +50,7 @@ type Module struct {
 	Duration, Tracking, Discharge, Optimal, Falloff, Chance float64 `json:",omitempty"`
 	DamageMultiplier, AlphaDamage, DamagePerSecond          float64 `json:",omitempty"`
 
-	// Misisle Attributes
+	// Missile Attributes
 	FlightTime, MaxVelocity float64 `json:",omitempty"`
 
 	// Damage Data
