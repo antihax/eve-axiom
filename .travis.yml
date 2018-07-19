@@ -9,11 +9,10 @@ before_install:
   - ./prereq.sh
 
 after_success:
-  - ./test.sh
   - if [ "$TRAVIS_BRANCH" == "master" ]
   - then
-  - ./build.sh
-  - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
-  - docker push antihax/eve-axiom
+  -   ./build.sh
+  -   docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
+  -   docker push antihax/eve-axiom
   - fi
   
