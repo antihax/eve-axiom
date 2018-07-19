@@ -1,5 +1,4 @@
 #!/bin/bash
-set +e
 mkdir prereq
 cd prereq
 wget https://github.com/antihax/libdogma/releases/download/latest/libdogma-latest.tar.xz
