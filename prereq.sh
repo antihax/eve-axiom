@@ -20,3 +20,5 @@ sudo make install
 
 cd ..
 cd ..
+
+sudo ldconfig
