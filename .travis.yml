@@ -6,14 +6,13 @@ services:
   - docker
 
 before_install:
-  - sudo /etc/init.d/mysql stop
+  - ./prereq.sh
   - go test
 
 after_success:
   - ./test.sh
   - if [ "$TRAVIS_BRANCH" == "master" ]
   - then
-  - ./prereq.sh
   - ./build.sh
   - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
   - docker push antihax/eve-axiom
