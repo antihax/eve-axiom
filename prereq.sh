@@ -11,9 +11,9 @@ tar -xf Judy-1.0.5.tar.gz
 cd judy-1.0.5
 ./configure
 make
-make install
+sudo make install
 cd ../libdogma
 ./configure
 make
-make install
+sudo make install
 cd ../../
