@@ -70,6 +70,10 @@ type Module struct {
 	RemoteEnergyTransferAmount  float64 `json:",omitempty"`
 	NeutralizerAmount           float64 `json:",omitempty"`
 	NosferatuAmount             float64 `json:",omitempty"`
+
+	ArmorRepair     float64 `json:",omitempty"`
+	ShieldRepair    float64 `json:",omitempty"`
+	StructureRepair float64 `json:",omitempty"`
 }
 
 type Drone struct {
@@ -341,12 +345,18 @@ func (c *Context) fillModuleAttributes(att *Attributes) error {
 				if m.RemoteArmorRepairAmount, err = c.GetModuleAttribute(84, mod.idx); err != nil {
 					return err
 				}
-
+			case EffectAncillaryRemoteArmorRepairer:
+				if m.RemoteArmorRepairAmount, err = c.GetModuleAttribute(84, mod.idx); err != nil {
+					return err
+				}
 			case EffectRemoteShieldTransferFalloff:
 				if m.RemoteShieldTransferAmount, err = c.GetModuleAttribute(68, mod.idx); err != nil {
 					return err
 				}
-
+			case EffectAncillaryRemoteShieldBooster:
+				if m.RemoteShieldTransferAmount, err = c.GetModuleAttribute(68, mod.idx); err != nil {
+					return err
+				}
 			case EffectRemoteEnergyTransfer:
 				if m.RemoteEnergyTransferAmount, err = c.GetModuleAttribute(90, mod.idx); err != nil {
 					return err
@@ -357,6 +367,28 @@ func (c *Context) fillModuleAttributes(att *Attributes) error {
 				}
 			case EffectEnergyNosferatuFalloff:
 				if m.NosferatuAmount, err = c.GetModuleAttribute(90, mod.idx); err != nil {
+					return err
+				}
+
+			case EffectArmorRepair:
+				if m.ArmorRepair, err = c.GetModuleAttribute(84, mod.idx); err != nil {
+					return err
+				}
+			case EffectFueledArmorRepair:
+				if m.ArmorRepair, err = c.GetModuleAttribute(84, mod.idx); err != nil {
+					return err
+				}
+			case EffectShieldBoosting:
+				if m.ShieldRepair, err = c.GetModuleAttribute(68, mod.idx); err != nil {
+					return err
+				}
+			case EffectFueledShieldBoosting:
+				if m.ShieldRepair, err = c.GetModuleAttribute(68, mod.idx); err != nil {
+					return err
+				}
+
+			case EffectStructureRepair:
+				if m.StructureRepair, err = c.GetModuleAttribute(83, mod.idx); err != nil {
 					return err
 				}
 			}
