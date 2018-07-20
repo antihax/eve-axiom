@@ -36,7 +36,7 @@ func (c *Axiom) getAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmail
 			if catID == 8 { // Charge
 				charges[item.Flag] = typeID
 			} else if catID == 18 { // Drone
-				q := uint32(item.QuantityDestroyed + item.QuantityDropped)
+				q := uint8(item.QuantityDestroyed + item.QuantityDropped)
 				err := ctx.AddDrone(typeID, q)
 				if err != nil {
 					return nil, err

@@ -15,6 +15,11 @@ package dogma
  dogma_location_t module_location(dogma_key_t slot) {
    return (dogma_location_t){ .type = DOGMA_LOC_Module, .module_index = slot };
  }
+
+ dogma_location_t drone_location(dogma_typeid_t typeid) {
+   return (dogma_location_t){ .type = DOGMA_LOC_Drone, .drone_typeid = typeid };
+ }
+
 */
 import "C"
 import (
@@ -58,6 +63,26 @@ type Module struct {
 
 	TypeID   int32 `json:",omitempty"`
 	ChargeID int32 `json:",omitempty"`
+
+	RemoteStructureRepairAmount float64 `json:",omitempty"`
+	RemoteArmorRepairAmount     float64 `json:",omitempty"`
+	RemoteShieldTransferAmount  float64 `json:",omitempty"`
+	RemoteEnergyTransferAmount  float64 `json:",omitempty"`
+	NeutralizerAmount           float64 `json:",omitempty"`
+	NosferatuAmount             float64 `json:",omitempty"`
+}
+
+type Drone struct {
+	// Basic Attributes
+	Duration, Tracking, Discharge, Optimal, Falloff, Chance float64 `json:",omitempty"`
+	DamageMultiplier, AlphaDamage, DamagePerSecond          float64 `json:",omitempty"`
+
+	DroneBandwith float64 `json:",omitempty"`
+	// Damage Data
+	Damage DamageProfile `json:",omitempty"`
+
+	TypeID   int32 `json:",omitempty"`
+	Quantity int32 `json:",omitempty"`
 }
 
 type Capacitor struct {
@@ -98,7 +123,9 @@ type Attributes struct {
 	CPURemaining float64 `json:",omitempty"`
 	PGRemaining  float64 `json:",omitempty"`
 
-	Modules map[uint8]Module `json:",omitempty"`
+	Modules   map[uint8]Module `json:",omitempty"`
+	Drones    []Drone          `json:",omitempty"`
+	MaxDrones float64          `json:",omitempty"`
 }
 
 // GetAttributes gets all the fit attributes
@@ -110,8 +137,6 @@ func (c *Context) GetAttributes() (*Attributes, error) {
 	att.Modules = make(map[uint8]Module)
 
 	att.ShipID = int32(c.shipID)
-
-	//	c.ActivateAllModules()
 
 	if att.PGRemaining, err = c.PowerLeft(); err != nil {
 		return nil, err
@@ -134,6 +159,10 @@ func (c *Context) GetAttributes() (*Attributes, error) {
 	}
 
 	if err := c.fillModuleAttributes(&att); err != nil {
+		return nil, err
+	}
+
+	if err := c.fillDroneAttributes(&att); err != nil {
 		return nil, err
 	}
 
@@ -173,9 +202,64 @@ func (c *Context) fillCapacitorAttributes(att *MWDAttributes) error {
 	return nil
 }
 
+func (c *Context) fillDroneAttributes(att *Attributes) error {
+	for _, drone := range c.drones {
+		typeID := C.dogma_typeid_t(drone.typeID)
+		i := uint(0)
+		var effect C.dogma_effectid_t
+
+		for {
+			if r := C.dogma_get_nth_type_effect_with_attributes(typeID, C.uint(i), &effect); r != 0 {
+				break
+			}
+			i++
+
+			var duration, tracking, discharge, optimal, falloff, chance C.double
+			C.dogma_get_location_effect_attributes(c.ctx,
+				C.drone_location(typeID), effect,
+				&duration, &tracking, &discharge, &optimal, &falloff, &chance,
+			)
+			m := Drone{
+				Duration:  float64(duration),
+				Tracking:  float64(tracking),
+				Discharge: float64(discharge),
+				Optimal:   float64(optimal),
+				Falloff:   float64(falloff),
+				Chance:    float64(chance),
+				TypeID:    int32(drone.typeID),
+				Quantity:  int32(drone.quantity),
+			}
+			var err error
+			if m.DroneBandwith, err = c.GetDroneAttribute(1272, typeID); err != nil {
+				return err
+			}
+			if m.Damage.Explosive, err = c.GetDroneAttribute(116, typeID); err != nil {
+				return err
+			}
+			if m.Damage.EM, err = c.GetDroneAttribute(114, typeID); err != nil {
+				return err
+			}
+			if m.Damage.Thermal, err = c.GetDroneAttribute(118, typeID); err != nil {
+				return err
+			}
+			if m.Damage.Kinetic, err = c.GetDroneAttribute(117, typeID); err != nil {
+				return err
+			}
+
+			if m.DamageMultiplier, err = c.GetDroneAttribute(64, typeID); err != nil {
+				return err
+			}
+			if m.DamageMultiplier == 0 {
+				m.DamageMultiplier = 1
+			}
+			att.Drones = append(att.Drones, m)
+		}
+	}
+	return nil
+}
+
 func (c *Context) fillModuleAttributes(att *Attributes) error {
 	for _, mod := range c.mods {
-
 		typeID := C.dogma_typeid_t(mod.typeID)
 		i := uint(0)
 		var effect C.dogma_effectid_t
@@ -246,7 +330,35 @@ func (c *Context) fillModuleAttributes(att *Attributes) error {
 
 				m.AlphaDamage = m.DamageMultiplier * (m.Damage.Kinetic + m.Damage.EM + m.Damage.Explosive + m.Damage.Thermal)
 				m.DamagePerSecond = m.AlphaDamage / (m.Duration / 1000)
+			}
 
+			switch effect {
+			case EffectRemoteHullRepairFalloff:
+				if m.RemoteStructureRepairAmount, err = c.GetModuleAttribute(83, mod.idx); err != nil {
+					return err
+				}
+			case EffectRemoteArmorRepairFalloff:
+				if m.RemoteArmorRepairAmount, err = c.GetModuleAttribute(84, mod.idx); err != nil {
+					return err
+				}
+
+			case EffectRemoteShieldTransferFalloff:
+				if m.RemoteShieldTransferAmount, err = c.GetModuleAttribute(68, mod.idx); err != nil {
+					return err
+				}
+
+			case EffectRemoteEnergyTransfer:
+				if m.RemoteEnergyTransferAmount, err = c.GetModuleAttribute(90, mod.idx); err != nil {
+					return err
+				}
+			case EffectEnergyNeutralizerFalloff:
+				if m.NeutralizerAmount, err = c.GetModuleAttribute(97, mod.idx); err != nil {
+					return err
+				}
+			case EffectEnergyNosferatuFalloff:
+				if m.NosferatuAmount, err = c.GetModuleAttribute(90, mod.idx); err != nil {
+					return err
+				}
 			}
 
 			att.Modules[uint8(mod.idx)] = m
@@ -261,6 +373,7 @@ func (c *Context) fillShipAttributes(att *Attributes) error {
 
 	attributes := map[string]C.ushort{
 		"warpSpeed":      600,
+		"maxDrones":      283,
 		"droneBandwidth": 1271,
 		"maxTargetRange": 76,
 
@@ -282,6 +395,9 @@ func (c *Context) fillShipAttributes(att *Attributes) error {
 		switch k {
 		case "warpSpeed":
 			att.WarpSpeed = float64(v)
+
+		case "maxDrones":
+			att.MaxDrones = float64(v)
 		case "droneBandwidth":
 			att.DroneBandwith = float64(v)
 		case "maxTargetRange":

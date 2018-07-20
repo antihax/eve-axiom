@@ -13,7 +13,6 @@ const (
 	EffectEMPWave                     = 38
 	EffectEnergyNeutralizerFalloff    = 6187
 	EffectEnergyNosferatuFalloff      = 6197
-	EffectEnergyTransfer              = 31
 	EffectFighterMissile              = 4729
 	EffectFueledArmorRepair           = 5275
 	EffectFueledShieldBoosting        = 4936
@@ -25,6 +24,7 @@ const (
 	EffectRemoteArmorRepairFalloff    = 6188
 	EffectRemoteHullRepairFalloff     = 6185
 	EffectRemoteShieldTransferFalloff = 6186
+	EffectRemoteEnergyTransfer        = 6184
 	EffectRigSlot                     = 2663
 	EffectShieldBoosting              = 4
 	EffectStructureRepair             = 26

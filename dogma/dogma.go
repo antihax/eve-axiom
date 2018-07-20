@@ -123,11 +123,11 @@ func (c *Context) AddModuleAndCharge(t uint32, ch uint32) (C.dogma_key_t, error)
 }
 
 // AddDrone to a ship
-func (c *Context) AddDrone(t uint32, num uint32) error {
+func (c *Context) AddDrone(t uint32, num uint8) error {
 	if r := C.dogma_add_drone(c.ctx, C.dogma_typeid_t(t), C.uint(num)); r != 0 {
 		return errors.New("failed to add module")
 	}
-
+	c.drones = append(c.drones, drone{typeID: t, quantity: num})
 	return nil
 }
 
@@ -167,6 +167,15 @@ func (c *Context) GetChargeAttribute(t uint16, i C.dogma_key_t) (float64, error)
 	var value C.double
 	if r := C.dogma_get_charge_attribute(c.ctx, i, C.dogma_attributeid_t(t), &value); r != 0 {
 		return 0, errors.New("failed to get attribute")
+	}
+	return float64(value), nil
+}
+
+// GetDroneAttribute of a fitted drone on a ship
+func (c *Context) GetDroneAttribute(t uint16, i C.dogma_typeid_t) (float64, error) {
+	var value C.double
+	if r := C.dogma_get_drone_attribute(c.ctx, i, C.dogma_attributeid_t(t), &value); r != 0 {
+		return 0, errors.New("failed get attribute")
 	}
 	return float64(value), nil
 }
