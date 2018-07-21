@@ -3,7 +3,6 @@ package axiom
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -48,7 +47,6 @@ func TestAxiom(t *testing.T) {
 			} else {
 				assert.Nil(t, err)
 			}
-			fmt.Println(ret)
 			assert.NotEqual(t, ret, "")
 		}(k, f)
 	}

@@ -25,6 +25,8 @@ import "C"
 import (
 	"errors"
 	"time"
+
+	"github.com/bradfitz/slice"
 )
 
 // DamageProfile is the four types of damage
@@ -102,9 +104,9 @@ type Attributes struct {
 	WithMWD    MWDAttributes `json:",omitempty"`
 	WithoutMWD MWDAttributes `json:",omitempty"`
 
-	Hull   Surface `json:",omitempty"`
-	Armor  Surface `json:",omitempty"`
-	Shield Surface `json:",omitempty"`
+	Structure Surface `json:",omitempty"`
+	Armor     Surface `json:",omitempty"`
+	Shield    Surface `json:",omitempty"`
 
 	MinEHP int64 `json:",omitempty"`
 	MaxEHP int64 `json:",omitempty"`
@@ -130,6 +132,13 @@ type Attributes struct {
 	Modules   map[uint8]Module `json:",omitempty"`
 	Drones    []Drone          `json:",omitempty"`
 	MaxDrones float64          `json:",omitempty"`
+
+	// Totals
+	DroneDPS, DroneAlpha, ModuleDPS, ModuleAlpha, TotalDPS, TotalAlpha    float64 `json:",omitempty"`
+	RemoteArmorRepairPerSecond, RemoteShieldTransferPerSecond             float64 `json:",omitempty"`
+	RemoteStructureRepairPerSecond, RemoteEnergyTransferPerSecond         float64 `json:",omitempty"`
+	ArmorRepairPerSecond, ShieldRepairPerSecond, StructureRepairPerSecond float64 `json:",omitempty"`
+	EnergyNeutralizerPerSecond                                            float64 `json:",omitempty"`
 }
 
 // GetAttributes gets all the fit attributes
@@ -170,11 +179,17 @@ func (c *Context) GetAttributes() (*Attributes, error) {
 		return nil, err
 	}
 
+	if err := c.optimalDroneConfiguration(&att); err != nil {
+		return nil, err
+	}
+
 	c.DeactivateMWD()
 	if err := c.fillMWDAffectedAttributes(&att.WithoutMWD); err != nil {
 		return nil, err
 	}
 
+	att.TotalAlpha = att.DroneAlpha + att.ModuleAlpha
+	att.TotalDPS = att.DroneDPS + att.ModuleDPS
 	return &att, nil
 }
 
@@ -256,9 +271,83 @@ func (c *Context) fillDroneAttributes(att *Attributes) error {
 			if m.DamageMultiplier == 0 {
 				m.DamageMultiplier = 1
 			}
+
+			m.AlphaDamage = m.DamageMultiplier * (m.Damage.Kinetic + m.Damage.EM + m.Damage.Explosive + m.Damage.Thermal)
+			m.DamagePerSecond = m.AlphaDamage / (m.Duration / 1000)
+
 			att.Drones = append(att.Drones, m)
 		}
 	}
+
+	return nil
+}
+
+func (c *Context) optimalDroneConfiguration(att *Attributes) error {
+
+	// Early out if there is no dronebay
+	if att.DroneBandwith < 1 {
+		return nil
+	}
+
+	// Save our list of available drones
+	type dcs struct {
+		dps       float64
+		alpha     float64
+		bandwidth float64
+		used      bool
+	}
+	dc := []dcs{}
+	for _, d := range att.Drones {
+		if d.DamagePerSecond > 0 {
+			for i := int32(0); i < d.Quantity; i++ {
+				dc = append(dc, dcs{
+					dps:       d.DamagePerSecond,
+					alpha:     d.AlphaDamage,
+					bandwidth: d.DroneBandwith,
+				})
+			}
+		}
+	}
+
+	// Sort the list lowest bandwidth first
+	slice.Sort(dc[:], func(i, j int) bool {
+		return dc[i].bandwidth < dc[j].bandwidth
+	})
+
+	// Determine optimal DPS
+	droneSlot := [5]*dcs{}
+	for i := range droneSlot {
+		droneSlot[i] = &dcs{}
+	}
+	availableBandwith := att.DroneBandwith
+	rounds := 2
+	for rounds > 0 {
+		for d := range dc {
+			for i := range droneSlot {
+				// Is this is a better unused drone and we have room?
+				if !dc[d].used && dc[d].dps > droneSlot[i].dps &&
+					availableBandwith+(droneSlot[i].bandwidth-dc[d].bandwidth) >= 0 {
+					// Recalculate Bandwidth
+					availableBandwith += droneSlot[i].bandwidth - dc[d].bandwidth
+					// swap the drone in the slot
+					droneSlot[i].used = false
+					dc[d].used = true
+					droneSlot[i] = &dc[d]
+					break // don't fill with the same drone
+				}
+			}
+		}
+		rounds--
+	}
+
+	var dps, alpha float64
+	for _, d := range droneSlot {
+		dps += d.dps
+		alpha += d.alpha
+	}
+
+	att.DroneDPS = dps
+	att.DroneAlpha = alpha
 	return nil
 }
 
@@ -397,6 +486,19 @@ func (c *Context) fillModuleAttributes(att *Attributes) error {
 		}
 	}
 
+	for _, d := range att.Modules {
+		att.ModuleDPS += d.DamagePerSecond
+		att.ModuleAlpha += d.AlphaDamage
+		att.RemoteArmorRepairPerSecond += d.RemoteArmorRepairAmount / (d.Duration / 1000)
+		att.RemoteShieldTransferPerSecond += d.RemoteShieldTransferAmount / (d.Duration / 1000)
+		att.RemoteStructureRepairPerSecond += d.RemoteStructureRepairAmount / (d.Duration / 1000)
+		att.RemoteEnergyTransferPerSecond += d.RemoteEnergyTransferAmount / (d.Duration / 1000)
+		att.ArmorRepairPerSecond += d.ArmorRepair / (d.Duration / 1000)
+		att.ShieldRepairPerSecond += d.ShieldRepair / (d.Duration / 1000)
+		att.StructureRepairPerSecond += d.StructureRepair / (d.Duration / 1000)
+		att.EnergyNeutralizerPerSecond += (d.NeutralizerAmount + d.NosferatuAmount) / (d.Duration / 1000)
+	}
+
 	return nil
 }
 
@@ -471,10 +573,10 @@ func (c *Context) fillTankAttributes(att *Attributes) error {
 		"ShieldKinetic":   273,
 		"ShieldThermal":   274,
 
-		"HullEm":        113,
-		"HullExplosive": 111,
-		"HullKinetic":   109,
-		"HullThermal":   110,
+		"StructureEm":        113,
+		"StructureExplosive": 111,
+		"StructureKinetic":   109,
+		"StructureThermal":   110,
 
 		"ShieldCapacity": 263,
 		"ArmorHp":        265,
@@ -503,21 +605,21 @@ func (c *Context) fillTankAttributes(att *Attributes) error {
 		case "ShieldThermal":
 			att.Shield.Resonance.Thermal = float64(v)
 
-		case "HullEm":
-			att.Hull.Resonance.EM = float64(v)
-		case "HullExplosive":
-			att.Hull.Resonance.Explosive = float64(v)
-		case "HullKinetic":
-			att.Hull.Resonance.Kinetic = float64(v)
-		case "HullThermal":
-			att.Hull.Resonance.Thermal = float64(v)
+		case "StructureEm":
+			att.Structure.Resonance.EM = float64(v)
+		case "StructureExplosive":
+			att.Structure.Resonance.Explosive = float64(v)
+		case "StructureKinetic":
+			att.Structure.Resonance.Kinetic = float64(v)
+		case "StructureThermal":
+			att.Structure.Resonance.Thermal = float64(v)
 
 		case "ShieldCapacity":
 			att.Shield.Hp = float64(v)
 		case "ArmorHp":
 			att.Armor.Hp = float64(v)
 		case "Hp":
-			att.Hull.Hp = float64(v)
+			att.Structure.Hp = float64(v)
 
 		}
 	}
@@ -536,11 +638,11 @@ func (c *Context) fillTankAttributes(att *Attributes) error {
 		att.Armor.Resonance.Kinetic,
 	})
 
-	att.Hull.Resonance.Avg = avg([]float64{
-		att.Hull.Resonance.EM,
-		att.Hull.Resonance.Explosive,
-		att.Hull.Resonance.Thermal,
-		att.Hull.Resonance.Kinetic,
+	att.Structure.Resonance.Avg = avg([]float64{
+		att.Structure.Resonance.EM,
+		att.Structure.Resonance.Explosive,
+		att.Structure.Resonance.Thermal,
+		att.Structure.Resonance.Kinetic,
 	})
 
 	att.Shield.Resonance.Min = min([]float64{
@@ -557,11 +659,11 @@ func (c *Context) fillTankAttributes(att *Attributes) error {
 		att.Armor.Resonance.Kinetic,
 	})
 
-	att.Hull.Resonance.Min = min([]float64{
-		att.Hull.Resonance.EM,
-		att.Hull.Resonance.Explosive,
-		att.Hull.Resonance.Thermal,
-		att.Hull.Resonance.Kinetic,
+	att.Structure.Resonance.Min = min([]float64{
+		att.Structure.Resonance.EM,
+		att.Structure.Resonance.Explosive,
+		att.Structure.Resonance.Thermal,
+		att.Structure.Resonance.Kinetic,
 	})
 	att.Shield.Resonance.Max = max([]float64{
 		att.Shield.Resonance.EM,
@@ -577,25 +679,25 @@ func (c *Context) fillTankAttributes(att *Attributes) error {
 		att.Armor.Resonance.Kinetic,
 	})
 
-	att.Hull.Resonance.Max = max([]float64{
-		att.Hull.Resonance.EM,
-		att.Hull.Resonance.Explosive,
-		att.Hull.Resonance.Thermal,
-		att.Hull.Resonance.Kinetic,
+	att.Structure.Resonance.Max = max([]float64{
+		att.Structure.Resonance.EM,
+		att.Structure.Resonance.Explosive,
+		att.Structure.Resonance.Thermal,
+		att.Structure.Resonance.Kinetic,
 	})
 
 	att.MinEHP =
-		int64((att.Hull.Hp / att.Hull.Resonance.Max) +
+		int64((att.Structure.Hp / att.Structure.Resonance.Max) +
 			(att.Armor.Hp / att.Armor.Resonance.Max) +
 			(att.Shield.Hp / att.Shield.Resonance.Max))
 
 	att.MaxEHP =
-		int64((att.Hull.Hp / att.Hull.Resonance.Min) +
+		int64((att.Structure.Hp / att.Structure.Resonance.Min) +
 			(att.Armor.Hp / att.Armor.Resonance.Min) +
 			(att.Shield.Hp / att.Shield.Resonance.Min))
 
 	att.AvgEHP =
-		int64((att.Hull.Hp / att.Hull.Resonance.Avg) +
+		int64((att.Structure.Hp / att.Structure.Resonance.Avg) +
 			(att.Armor.Hp / att.Armor.Resonance.Avg) +
 			(att.Shield.Hp / att.Shield.Resonance.Avg))
 
