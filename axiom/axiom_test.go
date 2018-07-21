@@ -48,6 +48,7 @@ func TestAxiom(t *testing.T) {
 				assert.Nil(t, err)
 			}
 			assert.NotEqual(t, ret, "")
+			log.Println(ret)
 		}(k, f)
 	}
 	wg.Wait()

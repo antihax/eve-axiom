@@ -112,6 +112,10 @@ type Attributes struct {
 	MaxEHP int64 `json:",omitempty"`
 	AvgEHP int64 `json:",omitempty"`
 
+	MinRPS float64 `json:",omitempty"`
+	MaxRPS float64 `json:",omitempty"`
+	AvgRPS float64 `json:",omitempty"`
+
 	Agility        float64 `json:",omitempty"`
 	ScanResolution float64 `json:",omitempty"`
 
@@ -190,6 +194,37 @@ func (c *Context) GetAttributes() (*Attributes, error) {
 
 	att.TotalAlpha = att.DroneAlpha + att.ModuleAlpha
 	att.TotalDPS = att.DroneDPS + att.ModuleDPS
+
+	att.MinEHP =
+		int64((att.Structure.Hp / att.Structure.Resonance.Max) +
+			(att.Armor.Hp / att.Armor.Resonance.Max) +
+			(att.Shield.Hp / att.Shield.Resonance.Max))
+
+	att.MaxEHP =
+		int64((att.Structure.Hp / att.Structure.Resonance.Min) +
+			(att.Armor.Hp / att.Armor.Resonance.Min) +
+			(att.Shield.Hp / att.Shield.Resonance.Min))
+
+	att.AvgEHP =
+		int64((att.Structure.Hp / att.Structure.Resonance.Avg) +
+			(att.Armor.Hp / att.Armor.Resonance.Avg) +
+			(att.Shield.Hp / att.Shield.Resonance.Avg))
+
+	att.MinRPS =
+		(att.StructureRepairPerSecond / att.Structure.Resonance.Max) +
+			(att.ArmorRepairPerSecond / att.Armor.Resonance.Max) +
+			(att.ShieldRepairPerSecond / att.Shield.Resonance.Max)
+
+	att.MaxRPS =
+		(att.StructureRepairPerSecond / att.Structure.Resonance.Min) +
+			(att.ArmorRepairPerSecond / att.Armor.Resonance.Min) +
+			(att.ShieldRepairPerSecond / att.Shield.Resonance.Min)
+
+	att.AvgRPS =
+		(att.StructureRepairPerSecond / att.Structure.Resonance.Avg) +
+			(att.ArmorRepairPerSecond / att.Armor.Resonance.Avg) +
+			(att.ShieldRepairPerSecond / att.Shield.Resonance.Avg)
+
 	return &att, nil
 }
 
@@ -685,21 +720,6 @@ func (c *Context) fillTankAttributes(att *Attributes) error {
 		att.Structure.Resonance.Thermal,
 		att.Structure.Resonance.Kinetic,
 	})
-
-	att.MinEHP =
-		int64((att.Structure.Hp / att.Structure.Resonance.Max) +
-			(att.Armor.Hp / att.Armor.Resonance.Max) +
-			(att.Shield.Hp / att.Shield.Resonance.Max))
-
-	att.MaxEHP =
-		int64((att.Structure.Hp / att.Structure.Resonance.Min) +
-			(att.Armor.Hp / att.Armor.Resonance.Min) +
-			(att.Shield.Hp / att.Shield.Resonance.Min))
-
-	att.AvgEHP =
-		int64((att.Structure.Hp / att.Structure.Resonance.Avg) +
-			(att.Armor.Hp / att.Armor.Resonance.Avg) +
-			(att.Shield.Hp / att.Shield.Resonance.Avg))
 
 	return nil
 }
