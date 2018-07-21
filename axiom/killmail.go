@@ -31,18 +31,20 @@ func (c *Axiom) getAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmail
 			if dogma.IsAbyssal(item.ItemTypeId) {
 				return nil, errors.New("Cannot fit Abyssal modules")
 			}
-			typeID := uint32(item.ItemTypeId)
-			catID := ctx.GetCategory(typeID)
-			if catID == 8 { // Charge
-				charges[item.Flag] = typeID
-			} else if catID == 18 { // Drone
-				q := uint8(item.QuantityDestroyed + item.QuantityDropped)
-				err := ctx.AddDrone(typeID, q)
-				if err != nil {
-					return nil, err
+			if !dogma.IsCyno(item.ItemTypeId) {
+				typeID := uint32(item.ItemTypeId)
+				catID := ctx.GetCategory(typeID)
+				if catID == 8 { // Charge
+					charges[item.Flag] = typeID
+				} else if catID == 18 { // Drone
+					q := uint8(item.QuantityDestroyed + item.QuantityDropped)
+					err := ctx.AddDrone(typeID, q)
+					if err != nil {
+						return nil, err
+					}
+				} else {
+					modules[item.Flag] = typeID
 				}
-			} else {
-				modules[item.Flag] = typeID
 			}
 		}
 	}

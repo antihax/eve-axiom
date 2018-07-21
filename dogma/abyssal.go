@@ -15,6 +15,18 @@ func IsAbyssal(typeID int32) bool {
 	return false
 }
 
+func IsCyno(typeID int32) bool {
+	for _, n := range []int32{
+		28646, 21096,
+	} {
+
+		if n == typeID {
+			return true
+		}
+	}
+	return false
+}
+
 func IsFitted(location int32) bool {
 	for _, n := range []int32{
 		87, // Drone Bay
