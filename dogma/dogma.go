@@ -242,7 +242,7 @@ func (c *Context) ActivateAllModules() error {
 
 	// Turn off AB
 	if c.ab > 0 {
-		if r := C.dogma_set_module_state(c.ctx, c.mwd, StateOnline); r != 0 {
+		if r := C.dogma_set_module_state(c.ctx, c.ab, StateOnline); r != 0 {
 			return errors.New("failed deactivating microwarp drive")
 		}
 	}
@@ -260,7 +260,7 @@ func (c *Context) DeactivateMWD() error {
 	}
 	// Turn on AB
 	if c.ab > 0 {
-		if r := C.dogma_set_module_state(c.ctx, c.mwd, StateActive); r != 0 {
+		if r := C.dogma_set_module_state(c.ctx, c.ab, StateActive); r != 0 {
 			return errors.New("failed deactivating microwarp drive")
 		}
 	}
