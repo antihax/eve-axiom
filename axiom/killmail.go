@@ -3,11 +3,12 @@ package axiom
 import (
 	"errors"
 
+	"github.com/antihax/eve-axiom/attributes"
 	"github.com/antihax/eve-axiom/dogma"
 	"github.com/antihax/goesi/esi"
 )
 
-func (c *Axiom) getAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmailHashOk) (*dogma.Attributes, error) {
+func (c *Axiom) getAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmailHashOk) (*attributes.Attributes, error) {
 	// setup dogma context
 	ctx, err := dogma.NewContext()
 	if err != nil {
