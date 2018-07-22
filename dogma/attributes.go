@@ -36,6 +36,10 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 		att attributes.Attributes
 		err error
 	)
+
+	// Fix MWD/AB states
+	c.ActivateAllModules()
+
 	att.Modules = make(map[uint8]attributes.Module)
 
 	att.ShipID = int32(c.shipID)

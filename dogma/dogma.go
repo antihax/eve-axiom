@@ -58,6 +58,7 @@ type Context struct {
 	mods   []module
 	drones []drone
 	mwd    C.dogma_key_t
+	ab     C.dogma_key_t
 	shipID uint32
 }
 
@@ -106,6 +107,15 @@ func (c *Context) AddModule(t uint32) (C.dogma_key_t, error) {
 
 	if bool(hasit) {
 		c.mwd = i
+	}
+
+	// Find any MWD and store
+	if r := C.dogma_type_has_effect(C.dogma_typeid_t(t), StateActive, C.dogma_effectid_t(6731), &hasit); r != 0 {
+		return 0, errors.New("failed to add module")
+	}
+
+	if bool(hasit) {
+		c.ab = i
 	}
 
 	return i, nil
@@ -229,13 +239,28 @@ func (c *Context) ActivateAllModules() error {
 			return errors.New("failed activating module")
 		}
 	}
+
+	// Turn off AB
+	if c.ab > 0 {
+		if r := C.dogma_set_module_state(c.ctx, c.mwd, StateOnline); r != 0 {
+			return errors.New("failed deactivating microwarp drive")
+		}
+	}
+
 	return nil
 }
 
 // DeactivateMWD on a ship
 func (c *Context) DeactivateMWD() error {
+	// Turn off mwd
 	if c.mwd > 0 {
 		if r := C.dogma_set_module_state(c.ctx, c.mwd, StateOnline); r != 0 {
+			return errors.New("failed deactivating microwarp drive")
+		}
+	}
+	// Turn on AB
+	if c.ab > 0 {
+		if r := C.dogma_set_module_state(c.ctx, c.mwd, StateActive); r != 0 {
 			return errors.New("failed deactivating microwarp drive")
 		}
 	}
