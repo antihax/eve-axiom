@@ -2,6 +2,7 @@ package axiom
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -28,14 +29,15 @@ func TestKillmails(t *testing.T) {
 		go func(k esi.GetKillmailsKillmailIdKillmailHashOk, f os.FileInfo) {
 			wg.Add(1)
 			defer wg.Done()
-			_, err := axiom.getAttributesFromKillmail(&k)
+			r, err := axiom.getAttributesFromKillmail(&k)
 			if err != nil && strings.Contains(err.Error(), "Abyssal") {
 				os.Remove("../json/" + f.Name())
 				log.Println("removing abyssal fitted ../json/" + f.Name())
 			} else {
 				assert.Nil(t, err)
 			}
-
+			b, _ := json.MarshalIndent(r, " ", "   ")
+			fmt.Printf("%s\n", b)
 		}(k, f)
 	}
 	wg.Done()

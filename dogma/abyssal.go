@@ -15,6 +15,65 @@ func IsAbyssal(typeID int32) bool {
 	return false
 }
 
+// SwapAbyssal to a T2 module
+func SwapAbyssal(typeID int32) int32 {
+	switch typeID {
+	case 47702:
+		return 527 // Stasis Webifier II
+	case 47769:
+		return 1183 // Small Armor Repairer II
+	case 47804:
+		return 3831 // Medium Shield Extender II
+	case 47408:
+		return 12076 // 50MN Microwarpdrive II
+	case 47757:
+		return 12068 // 100MN Afterburner II
+	case 47800:
+		return 380 // Small Shield Extender II
+	case 47753:
+		return 12058 // 10MN Afterburner II
+	case 47793:
+		return 10842 // X-Large Shield Booster II
+	case 47749:
+		return 438 // 1MN Afterburner II
+	case 47789:
+		return 10842 // X-Large Shield Booster II
+	case 47745:
+		return 12084 // 500MN Microwarpdrive II
+	case 47785:
+		return 10850 // Medium Shield Booster II
+	case 47832:
+		return 12271 // Heavy Energy Neutralizer II
+	case 47740:
+		return 440 // 5MN Microwarpdrive II
+	case 47781:
+		return 400 // Small Shield Booster II
+	case 47828:
+		return 12267 // Medium Energy Neutralizer II
+	case 47736:
+		return 3244 // Warp Disruptor II
+	case 47777:
+		return 3540 // Large Armor Repairer II
+	case 47824:
+		return 13003 // Small Energy Neutralizer II
+	case 47732:
+		return 448 // Warp Scrambler II
+	case 47773:
+		return 3530 // Medium Armor Repairer II
+	case 47808:
+		return 3841 // Large Shield Extender II
+	case 47812:
+		return 20351 // Small Abyssal Armor Plates
+	case 47817:
+		return 20347 // Medium Abyssal Armor Plates
+	case 47820:
+		return 20353 // Large Abyssal Armor Plates
+	case 48439:
+		return 3504 // Large Cap Battery
+	}
+	return typeID
+}
+
 func IsCyno(typeID int32) bool {
 	for _, n := range []int32{
 		28646, 21096,

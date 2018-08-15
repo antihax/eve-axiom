@@ -33,6 +33,9 @@ type Module struct {
 	// Missile Attributes
 	FlightTime, MaxVelocity float64 `json:",omitempty"`
 
+	// Module location
+	Location int32
+
 	// Damage Data
 	Damage DamageProfile `json:",omitempty"`
 
@@ -105,6 +108,9 @@ type Attributes struct {
 
 	CPURemaining float64 `json:",omitempty"`
 	PGRemaining  float64 `json:",omitempty"`
+
+	CPUTotal float64 `json:",omitempty"`
+	PGTotal  float64 `json:",omitempty"`
 
 	Modules   map[uint8]Module `json:",omitempty"`
 	Drones    []Drone          `json:",omitempty"`

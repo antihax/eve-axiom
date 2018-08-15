@@ -299,6 +299,7 @@ func (c *Context) fillModuleAttributes(att *attributes.Attributes) error {
 
 			m := attributes.Module{
 				Duration:  float64(duration),
+				Location:  mod.location,
 				Tracking:  float64(tracking),
 				Discharge: float64(discharge),
 				Optimal:   float64(optimal),
@@ -437,6 +438,9 @@ func (c *Context) fillShipAttributes(att *attributes.Attributes) error {
 
 		"agility": 70,
 
+		"power": 11,
+		"cpu":   48,
+
 		"scanGravimetricStrength":   211,
 		"scanLadarStrength":         209,
 		"scanMagnetometricStrength": 210,
@@ -463,6 +467,11 @@ func (c *Context) fillShipAttributes(att *attributes.Attributes) error {
 
 		case "agility":
 			att.Agility = float64(v)
+
+		case "power":
+			att.PGTotal = float64(v)
+		case "cpu":
+			att.CPUTotal = float64(v)
 
 		case "scanGravimetricStrength":
 			att.GravStrenth = float64(v)

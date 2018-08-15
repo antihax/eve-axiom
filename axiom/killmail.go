@@ -1,8 +1,6 @@
 package axiom
 
 import (
-	"errors"
-
 	"github.com/antihax/eve-axiom/attributes"
 	"github.com/antihax/eve-axiom/dogma"
 	"github.com/antihax/goesi/esi"
@@ -29,9 +27,10 @@ func (c *Axiom) getAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmail
 	// loop all items on the lost ship, adding drones, and first pass to find modules and charges
 	for _, item := range km.Victim.Items {
 		if dogma.IsFitted(item.Flag) {
-			if dogma.IsAbyssal(item.ItemTypeId) {
-				return nil, errors.New("Cannot fit Abyssal modules")
-			}
+
+			// Swap any abyssal mods to t2
+			item.ItemTypeId = dogma.SwapAbyssal(item.ItemTypeId)
+
 			if !dogma.IsCyno(item.ItemTypeId) {
 				typeID := uint32(item.ItemTypeId)
 				catID := ctx.GetCategory(typeID)
@@ -53,12 +52,12 @@ func (c *Axiom) getAttributesFromKillmail(km *esi.GetKillmailsKillmailIdKillmail
 	// Second pass with modules and loaded charges
 	for i := range modules {
 		if _, ok := charges[i]; ok {
-			_, err := ctx.AddModuleAndCharge(modules[i], charges[i])
+			_, err := ctx.AddModuleAndCharge(modules[i], charges[i], i)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			_, err := ctx.AddModule(modules[i])
+			_, err := ctx.AddModule(modules[i], i)
 			if err != nil {
 				return nil, err
 			}

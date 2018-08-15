@@ -66,6 +66,7 @@ type module struct {
 	idx      C.dogma_key_t
 	typeID   uint32
 	chargeID uint32
+	location int32
 }
 
 type drone struct {
@@ -92,13 +93,13 @@ func (c *Context) SetShip(t uint32) error {
 }
 
 // AddModule to a ship
-func (c *Context) AddModule(t uint32) (C.dogma_key_t, error) {
+func (c *Context) AddModule(t uint32, location int32) (C.dogma_key_t, error) {
 	var i C.dogma_key_t
 	var hasit C.bool
 	if r := C.dogma_add_module_s(c.ctx, C.dogma_typeid_t(t), &i, StateActive); r != 0 {
 		return 0, errors.New("failed to add module")
 	}
-	c.mods = append(c.mods, module{typeID: t, idx: i})
+	c.mods = append(c.mods, module{typeID: t, idx: i, location: location})
 
 	// Find any MWD and store
 	if r := C.dogma_type_has_effect(C.dogma_typeid_t(t), StateActive, C.dogma_effectid_t(6730), &hasit); r != 0 {
@@ -122,13 +123,13 @@ func (c *Context) AddModule(t uint32) (C.dogma_key_t, error) {
 }
 
 // AddModuleAndCharge to a ship
-func (c *Context) AddModuleAndCharge(t uint32, ch uint32) (C.dogma_key_t, error) {
+func (c *Context) AddModuleAndCharge(t uint32, ch uint32, location int32) (C.dogma_key_t, error) {
 	var i C.dogma_key_t
 	if r := C.dogma_add_module_sc(c.ctx, C.dogma_typeid_t(t), &i, StateActive, C.dogma_typeid_t(ch)); r != 0 {
 		return 0, errors.New("failed to add module with charge")
 	}
 
-	c.mods = append(c.mods, module{chargeID: ch, typeID: t, idx: i})
+	c.mods = append(c.mods, module{chargeID: ch, typeID: t, idx: i, location: location})
 	return i, nil
 }
 

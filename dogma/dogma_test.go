@@ -7,8 +7,8 @@ func BenchmarkRifter(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		ctx, err := NewContext()
 		assert.Nil(b, err)
-		ctx.SetShip(587)              // Rifter
-		i, err := ctx.AddModule(3831) // Medium Shield Extender II
+		ctx.SetShip(587)                 // Rifter
+		i, err := ctx.AddModule(3831, 1) // Medium Shield Extender II
 		assert.Nil(b, err)
 		ctx.GetShipAttribute(263)
 		ctx.GetModuleAttribute(50, i)
@@ -21,7 +21,7 @@ func BenchmarkRifterReuseCtx(b *testing.B) {
 	assert.Nil(b, err)
 	ctx.SetShip(587) // Rifter
 	for n := 0; n < b.N; n++ {
-		i, err := ctx.AddModule(3831) // Medium Shield Extender II
+		i, err := ctx.AddModule(3831, 1) // Medium Shield Extender II
 		assert.Nil(b, err)
 		ctx.GetShipAttribute(263)
 		ctx.GetModuleAttribute(50, i)
@@ -36,7 +36,7 @@ func TestDogmaContext_PowerLeft(t *testing.T) {
 	p, err := ctx.PowerLeft()
 	assert.Nil(t, err)
 	assert.EqualValues(t, 51.25, p)
-	ctx.AddModule(3831) // Medium Shield Extender II
+	ctx.AddModule(3831, 1) // Medium Shield Extender II
 	p, err = ctx.PowerLeft()
 	assert.Nil(t, err)
 	assert.EqualValues(t, 28.75, p)
@@ -55,8 +55,8 @@ func TestDogmaContext_Validate(t *testing.T) {
 func TestDogmaContext_GetChargeAttributes(t *testing.T) {
 	ctx, err := NewContext()
 	assert.Nil(t, err)
-	ctx.SetShip(587)               // Rifter
-	i, err := ctx.AddModule(10631) // Rocket Launcher II
+	ctx.SetShip(587)                  // Rifter
+	i, err := ctx.AddModule(10631, 1) // Rocket Launcher II
 	assert.Nil(t, err)
 	ctx.AddCharge(2514, i) // Inferno Rocket
 	//DamageTypeEm:        dmgMultiplier * f.ReadChargeAttribute(114, idx),
