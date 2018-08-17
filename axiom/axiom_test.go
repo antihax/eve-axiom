@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/antihax/goesi/esi"
-
 	"github.com/stretchr/testify/assert"
 )
 

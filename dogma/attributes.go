@@ -37,10 +37,11 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 		err error
 	)
 
+	att.Attributes = make(map[string]float64)
 	// Fix MWD/AB states
 	c.ActivateAllModules()
 
-	att.Modules = make(map[uint8]attributes.Module)
+	att.Modules = make(map[uint8]*attributes.Module)
 
 	att.ShipID = int32(c.shipID)
 
@@ -52,11 +53,12 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 		return nil, err
 	}
 
-	if err := c.fillTankAttributes(&att); err != nil {
+	// Fill basic ship attributes
+	if err := c.fillShipAttributes(&att); err != nil {
 		return nil, err
 	}
 
-	if err := c.fillShipAttributes(&att); err != nil {
+	if err := c.fillTankAttributes(&att); err != nil {
 		return nil, err
 	}
 
@@ -81,40 +83,60 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 		return nil, err
 	}
 
+	if err := c.fillAllShipAttributes(&att); err != nil {
+		return nil, err
+	}
+
 	att.TotalAlpha = att.DroneAlpha + att.ModuleAlpha
 	att.TotalDPS = att.DroneDPS + att.ModuleDPS
 
-	att.MinEHP =
-		int64((att.Structure.Hp / att.Structure.Resonance.Max) +
-			(att.Armor.Hp / att.Armor.Resonance.Max) +
-			(att.Shield.Hp / att.Shield.Resonance.Max))
+	if att.Structure.Resonance.Max > 0 && att.Armor.Resonance.Max > 0 && att.Shield.Resonance.Max > 0 {
+		att.MinEHP =
+			int64((att.Structure.Hp / att.Structure.Resonance.Max) +
+				(att.Armor.Hp / att.Armor.Resonance.Max) +
+				(att.Shield.Hp / att.Shield.Resonance.Max))
 
-	att.MaxEHP =
-		int64((att.Structure.Hp / att.Structure.Resonance.Min) +
-			(att.Armor.Hp / att.Armor.Resonance.Min) +
-			(att.Shield.Hp / att.Shield.Resonance.Min))
+		att.MaxEHP =
+			int64((att.Structure.Hp / att.Structure.Resonance.Min) +
+				(att.Armor.Hp / att.Armor.Resonance.Min) +
+				(att.Shield.Hp / att.Shield.Resonance.Min))
 
-	att.AvgEHP =
-		int64((att.Structure.Hp / att.Structure.Resonance.Avg) +
-			(att.Armor.Hp / att.Armor.Resonance.Avg) +
-			(att.Shield.Hp / att.Shield.Resonance.Avg))
+		att.AvgEHP =
+			int64((att.Structure.Hp / att.Structure.Resonance.Avg) +
+				(att.Armor.Hp / att.Armor.Resonance.Avg) +
+				(att.Shield.Hp / att.Shield.Resonance.Avg))
 
-	att.MinRPS =
-		(att.StructureRepairPerSecond / att.Structure.Resonance.Max) +
-			(att.ArmorRepairPerSecond / att.Armor.Resonance.Max) +
-			(att.ShieldRepairPerSecond / att.Shield.Resonance.Max)
+		att.MinRPS =
+			(att.StructureRepairPerSecond / att.Structure.Resonance.Max) +
+				(att.ArmorRepairPerSecond / att.Armor.Resonance.Max) +
+				(att.ShieldRepairPerSecond / att.Shield.Resonance.Max)
 
-	att.MaxRPS =
-		(att.StructureRepairPerSecond / att.Structure.Resonance.Min) +
-			(att.ArmorRepairPerSecond / att.Armor.Resonance.Min) +
-			(att.ShieldRepairPerSecond / att.Shield.Resonance.Min)
+		att.MaxRPS =
+			(att.StructureRepairPerSecond / att.Structure.Resonance.Min) +
+				(att.ArmorRepairPerSecond / att.Armor.Resonance.Min) +
+				(att.ShieldRepairPerSecond / att.Shield.Resonance.Min)
 
-	att.AvgRPS =
-		(att.StructureRepairPerSecond / att.Structure.Resonance.Avg) +
-			(att.ArmorRepairPerSecond / att.Armor.Resonance.Avg) +
-			(att.ShieldRepairPerSecond / att.Shield.Resonance.Avg)
-
+		att.AvgRPS =
+			(att.StructureRepairPerSecond / att.Structure.Resonance.Avg) +
+				(att.ArmorRepairPerSecond / att.Armor.Resonance.Avg) +
+				(att.ShieldRepairPerSecond / att.Shield.Resonance.Avg)
+	}
 	return &att, nil
+}
+
+func (c *Context) fillAllShipAttributes(att *attributes.Attributes) error {
+	var v C.double
+
+	// Get all known attributes
+	for _, k := range typeAttributeMap[int32(c.shipID)] {
+		if r := C.dogma_get_ship_attribute(c.ctx, C.ushort(k), &v); r == 0 {
+			if v != 0 {
+				att.Attributes[attributeMap[k]] = float64(v)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (c *Context) fillCapacitorAttributes(att *attributes.MWDAttributes) error {
@@ -207,7 +229,6 @@ func (c *Context) fillDroneAttributes(att *attributes.Attributes) error {
 }
 
 func (c *Context) optimalDroneConfiguration(att *attributes.Attributes) error {
-
 	// Early out if there is no dronebay
 	if att.DroneBandwith < 1 {
 		return nil
@@ -281,6 +302,31 @@ func (c *Context) fillModuleAttributes(att *attributes.Attributes) error {
 		i := uint(0)
 		var effect C.dogma_effectid_t
 
+		m := &attributes.Module{
+			Attributes: make(map[string]float64),
+			TypeID:     int32(mod.typeID),
+			ChargeID:   int32(mod.chargeID),
+			Location:   mod.location,
+		}
+		att.Modules[uint8(mod.idx)] = m
+		var err error
+		// Get all known attributes
+		for _, k := range typeAttributeMap[int32(mod.typeID)] {
+			var v float64
+			if v, err = c.GetModuleAttribute(uint16(k), mod.idx); err == nil {
+				if v != 0 {
+					m.Attributes[attributeMap[k]] = v
+				}
+			}
+		}
+		for _, k := range typeAttributeMap[int32(mod.chargeID)] {
+			var v float64
+			if v, err = c.GetChargeAttribute(uint16(k), mod.idx); err == nil {
+				if v != 0 {
+					m.Attributes[attributeMap[k]] = v
+				}
+			}
+		}
 		for {
 			if r := C.dogma_get_nth_type_effect_with_attributes(typeID, C.uint(i), &effect); r != 0 {
 				break
@@ -296,19 +342,13 @@ func (c *Context) fillModuleAttributes(att *attributes.Attributes) error {
 				C.module_location(mod.idx), effect,
 				&duration, &tracking, &discharge, &optimal, &falloff, &chance,
 			)
+			m.Duration = float64(duration)
+			m.Tracking = float64(tracking)
+			m.Discharge = float64(discharge)
+			m.Optimal = float64(optimal)
+			m.Falloff = float64(falloff)
+			m.Chance = float64(chance)
 
-			m := attributes.Module{
-				Duration:  float64(duration),
-				Location:  mod.location,
-				Tracking:  float64(tracking),
-				Discharge: float64(discharge),
-				Optimal:   float64(optimal),
-				Falloff:   float64(falloff),
-				Chance:    float64(chance),
-				TypeID:    int32(mod.typeID),
-				ChargeID:  int32(mod.chargeID),
-			}
-			var err error
 			if duration > 1e-10 && mod.chargeID > 0 {
 				// Missile Specific
 				if effect == EffectUseMissiles {
@@ -407,30 +447,30 @@ func (c *Context) fillModuleAttributes(att *attributes.Attributes) error {
 				}
 			}
 
-			att.Modules[uint8(mod.idx)] = m
 		}
 	}
 
 	for _, d := range att.Modules {
 		att.ModuleDPS += d.DamagePerSecond
 		att.ModuleAlpha += d.AlphaDamage
-		att.RemoteArmorRepairPerSecond += d.RemoteArmorRepairAmount / (d.Duration / 1000)
-		att.RemoteShieldTransferPerSecond += d.RemoteShieldTransferAmount / (d.Duration / 1000)
-		att.RemoteStructureRepairPerSecond += d.RemoteStructureRepairAmount / (d.Duration / 1000)
-		att.RemoteEnergyTransferPerSecond += d.RemoteEnergyTransferAmount / (d.Duration / 1000)
-		att.ArmorRepairPerSecond += d.ArmorRepair / (d.Duration / 1000)
-		att.ShieldRepairPerSecond += d.ShieldRepair / (d.Duration / 1000)
-		att.StructureRepairPerSecond += d.StructureRepair / (d.Duration / 1000)
-		att.EnergyNeutralizerPerSecond += (d.NeutralizerAmount + d.NosferatuAmount) / (d.Duration / 1000)
+		if d.Duration > 0 {
+			att.RemoteArmorRepairPerSecond += d.RemoteArmorRepairAmount / (d.Duration / 1000)
+			att.RemoteShieldTransferPerSecond += d.RemoteShieldTransferAmount / (d.Duration / 1000)
+			att.RemoteStructureRepairPerSecond += d.RemoteStructureRepairAmount / (d.Duration / 1000)
+			att.RemoteEnergyTransferPerSecond += d.RemoteEnergyTransferAmount / (d.Duration / 1000)
+			att.ArmorRepairPerSecond += d.ArmorRepair / (d.Duration / 1000)
+			att.ShieldRepairPerSecond += d.ShieldRepair / (d.Duration / 1000)
+			att.StructureRepairPerSecond += d.StructureRepair / (d.Duration / 1000)
+			att.EnergyNeutralizerPerSecond += (d.NeutralizerAmount + d.NosferatuAmount) / (d.Duration / 1000)
+		}
 	}
 
 	return nil
 }
 
 func (c *Context) fillShipAttributes(att *attributes.Attributes) error {
-	var v C.double
 
-	attributes := map[string]C.ushort{
+	attributes := map[string]uint16{
 		"warpSpeed":      600,
 		"maxDrones":      283,
 		"droneBandwidth": 1271,
@@ -451,7 +491,11 @@ func (c *Context) fillShipAttributes(att *attributes.Attributes) error {
 	}
 
 	for k, id := range attributes {
-		if r := C.dogma_get_ship_attribute(c.ctx, id, &v); r != 0 {
+		var (
+			v   float64
+			err error
+		)
+		if v, err = c.GetShipAttribute(id); err != nil {
 			return errors.New("Could not get attributes")
 		}
 		switch k {
@@ -494,8 +538,7 @@ func (c *Context) fillShipAttributes(att *attributes.Attributes) error {
 }
 
 func (c *Context) fillTankAttributes(att *attributes.Attributes) error {
-	var v C.double
-	resonances := map[string]C.ushort{
+	resonances := map[string]uint16{
 		"ArmorEm":        267,
 		"ArmorExplosive": 268,
 		"ArmorKinetic":   269,
@@ -516,7 +559,11 @@ func (c *Context) fillTankAttributes(att *attributes.Attributes) error {
 		"Hp":             9,
 	}
 	for k, id := range resonances {
-		if r := C.dogma_get_ship_attribute(c.ctx, id, &v); r != 0 {
+		var (
+			v   float64
+			err error
+		)
+		if v, err = c.GetShipAttribute(id); err != nil {
 			return errors.New("Could not get attributes")
 		}
 		switch k {

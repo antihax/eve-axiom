@@ -26,6 +26,7 @@ type MWDAttributes struct {
 }
 
 type Module struct {
+	Attributes map[string]float64 `json:",omitempty"`
 	// Basic Attributes
 	Duration, Tracking, Discharge, Optimal, Falloff, Chance float64 `json:",omitempty"`
 	DamageMultiplier, AlphaDamage, DamagePerSecond          float64 `json:",omitempty"`
@@ -55,6 +56,7 @@ type Module struct {
 }
 
 type Drone struct {
+	Attributes map[string]float64 `json:",omitempty"`
 	// Basic Attributes
 	Duration, Tracking, Discharge, Optimal, Falloff, Chance float64 `json:",omitempty"`
 	DamageMultiplier, AlphaDamage, DamagePerSecond          float64 `json:",omitempty"`
@@ -76,9 +78,10 @@ type Capacitor struct {
 
 // Attributes for all the fit attributes
 type Attributes struct {
-	ShipID     int32         `json:",omitempty"`
-	WithMWD    MWDAttributes `json:",omitempty"`
-	WithoutMWD MWDAttributes `json:",omitempty"`
+	Attributes map[string]float64 `json:",omitempty"`
+	ShipID     int32              `json:",omitempty"`
+	WithMWD    MWDAttributes      `json:",omitempty"`
+	WithoutMWD MWDAttributes      `json:",omitempty"`
 
 	Structure Surface `json:",omitempty"`
 	Armor     Surface `json:",omitempty"`
@@ -112,9 +115,9 @@ type Attributes struct {
 	CPUTotal float64 `json:",omitempty"`
 	PGTotal  float64 `json:",omitempty"`
 
-	Modules   map[uint8]Module `json:",omitempty"`
-	Drones    []Drone          `json:",omitempty"`
-	MaxDrones float64          `json:",omitempty"`
+	Modules   map[uint8]*Module `json:",omitempty"`
+	Drones    []Drone           `json:",omitempty"`
+	MaxDrones float64           `json:",omitempty"`
 
 	// Totals
 	DroneDPS, DroneAlpha, ModuleDPS, ModuleAlpha, TotalDPS, TotalAlpha    float64 `json:",omitempty"`

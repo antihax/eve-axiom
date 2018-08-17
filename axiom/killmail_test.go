@@ -28,16 +28,23 @@ func TestKillmails(t *testing.T) {
 		go func(k esi.GetKillmailsKillmailIdKillmailHashOk, f os.FileInfo) {
 			wg.Add(1)
 			defer wg.Done()
-			_, err := axiom.getAttributesFromKillmail(&k)
+			r, err := axiom.getAttributesFromKillmail(&k)
 			if err != nil && strings.Contains(err.Error(), "Abyssal") {
 				os.Remove("../json/" + f.Name())
 				log.Println("removing abyssal fitted ../json/" + f.Name())
 			} else {
 				assert.Nil(t, err)
 			}
-			//	b, _ := json.MarshalIndent(r, " ", "   ")
-			//	fmt.Printf("%s\n", b)
+			/*	if len(r.Modules) > 0 {
+				b, err := json.MarshalIndent(r, " ", "   ")
+				fmt.Printf("%s %v\n", b, err)
+			}*/
+
+			_, err = json.MarshalIndent(r, " ", "   ")
+			assert.Nil(t, err)
+
 		}(k, f)
 	}
 	wg.Done()
+	wg.Wait()
 }
