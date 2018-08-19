@@ -22,18 +22,21 @@ type attribute struct {
 }
 
 var (
-	attrChan chan attribute
-	typeChan chan esi.GetUniverseTypesTypeIdOk
-	esiCli   *goesi.APIClient
-	wg       sync.WaitGroup
-	ag       sync.WaitGroup
-	tg       sync.WaitGroup
+	attrChan   chan attribute
+	effectChan chan esi.GetDogmaEffectsEffectIdOk
+	typeChan   chan esi.GetUniverseTypesTypeIdOk
+	esiCli     *goesi.APIClient
+	wg         sync.WaitGroup
+	ag         sync.WaitGroup
+	tg         sync.WaitGroup
+	eg         sync.WaitGroup
 )
 
 func main() {
 	fmt.Printf("package dogma\n\n")
 	attrChan = make(chan attribute, 5000)
 	typeChan = make(chan esi.GetUniverseTypesTypeIdOk, 50000)
+	effectChan = make(chan esi.GetDogmaEffectsEffectIdOk, 50000)
 
 	esiCli = goesi.NewAPIClient(
 		&http.Client{
@@ -55,6 +58,17 @@ func main() {
 		},
 		"eve-axiom: shhh it's almost over",
 	)
+
+	effects, _, err := esiCli.ESI.DogmaApi.GetDogmaEffects(context.Background(), nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	go collectAllEffects()
+	for _, a := range effects {
+		wg.Add(1)
+		go getEffect(a)
+	}
 
 	attributes, _, err := esiCli.ESI.DogmaApi.GetDogmaAttributes(context.Background(), nil)
 	if err != nil {
@@ -97,9 +111,11 @@ func main() {
 	// were done with this,
 	close(attrChan)
 	close(typeChan)
+	close(effectChan)
 
 	ag.Wait()
 	tg.Wait()
+	eg.Wait()
 }
 
 func collectAllTypes() {
@@ -119,6 +135,21 @@ func collectAllTypes() {
 	tg.Done()
 }
 
+func collectAllEffects() {
+	eg.Add(1)
+	effects := make(map[int32]string)
+	effectAttrs := make(map[int32]bool)
+	for t := range effectChan {
+		effects[t.EffectId] = t.Name
+		effectAttrs[t.EffectId] = t.IsAssistance
+	}
+
+	// Dump our structure to a go file
+	fmt.Printf("var effectMap = %#v\n", effects)
+	fmt.Printf("var effectIsAssistanceMap = %#v\n", effectAttrs)
+	eg.Done()
+}
+
 func collectAllAttributes() {
 	ag.Add(1)
 	atts := make(map[int32]string)
@@ -131,15 +162,14 @@ func collectAllAttributes() {
 
 	ag.Done()
 }
-
-func getAttribute(a int32) {
+func getEffect(a int32) {
 	defer wg.Done()
-	att, _, err := esiCli.ESI.DogmaApi.GetDogmaAttributesAttributeId(context.Background(), a, nil)
+	t, _, err := esiCli.ESI.DogmaApi.GetDogmaEffectsEffectId(context.Background(), a, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	attrChan <- attribute{Name: att.Name, ID: att.AttributeId}
+	effectChan <- t
 }
 
 func getType(a int32) {
@@ -150,6 +180,16 @@ func getType(a int32) {
 	}
 
 	typeChan <- t
+}
+
+func getAttribute(a int32) {
+	defer wg.Done()
+	att, _, err := esiCli.ESI.DogmaApi.GetDogmaAttributesAttributeId(context.Background(), a, nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	attrChan <- attribute{Name: att.Name, ID: att.AttributeId}
 }
 
 var apiTransportLimiter chan bool

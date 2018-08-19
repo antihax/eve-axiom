@@ -24,7 +24,8 @@ package dogma
 import "C"
 import (
 	"errors"
-	"time"
+	"math"
+	"unicode"
 
 	"github.com/antihax/eve-axiom/attributes"
 	"github.com/bradfitz/slice"
@@ -32,142 +33,84 @@ import (
 
 // GetAttributes gets all the fit attributes
 func (c *Context) GetAttributes() (*attributes.Attributes, error) {
-	var (
-		att attributes.Attributes
-		err error
-	)
 
-	att.Attributes = make(map[string]float64)
+	att := &attributes.Attributes{}
+
+	att.TypeID = int32(c.shipID)
+	att.Ship = make(map[string]float64)
+	att.Modules = make(map[uint8]map[string]float64)
+	a := att.Ship
+
 	// Fix MWD/AB states
 	c.ActivateAllModules()
 
-	att.Modules = make(map[uint8]*attributes.Module)
+	if pg, err := c.PowerLeft(); err != nil {
+		return nil, err
+	} else {
+		a["powerRemaining"] = pg
+	}
 
-	att.ShipID = int32(c.shipID)
+	if cpu, err := c.CPULeft(); err != nil {
+		return nil, err
+	} else {
+		a["cpuRemaining"] = cpu
+	}
 
-	if att.PGRemaining, err = c.PowerLeft(); err != nil {
+	if err := c.fillAllShipAttributes(a); err != nil {
+		return nil, err
+	}
+	if c.mwd > 0 {
+		if err := c.fillMWDAffectedAttributes(a, "MWD"); err != nil {
+			return nil, err
+		}
+	}
+	c.fillTankAttributes(a)
+
+	if err := c.fillModuleAttributes(att.Modules); err != nil {
 		return nil, err
 	}
 
-	if att.CPURemaining, err = c.CPULeft(); err != nil {
+	if err := c.fillDroneAttributes(att.Drones); err != nil {
 		return nil, err
 	}
 
-	// Fill basic ship attributes
-	if err := c.fillShipAttributes(&att); err != nil {
+	if err := c.optimalDroneConfiguration(att); err != nil {
 		return nil, err
 	}
 
-	if err := c.fillTankAttributes(&att); err != nil {
-		return nil, err
-	}
-
-	if err := c.fillMWDAffectedAttributes(&att.WithMWD); err != nil {
-		return nil, err
-	}
-
-	if err := c.fillModuleAttributes(&att); err != nil {
-		return nil, err
-	}
-
-	if err := c.fillDroneAttributes(&att); err != nil {
-		return nil, err
-	}
-
-	if err := c.optimalDroneConfiguration(&att); err != nil {
+	if err := c.sumModuleAttributes(att); err != nil {
 		return nil, err
 	}
 
 	c.DeactivateMWD()
-	if err := c.fillMWDAffectedAttributes(&att.WithoutMWD); err != nil {
+	if err := c.fillMWDAffectedAttributes(a, ""); err != nil {
 		return nil, err
 	}
 
-	if err := c.fillAllShipAttributes(&att); err != nil {
-		return nil, err
+	totalAlpha := a["droneAlphaDamage"] + a["moduleAlphaDamage"]
+	totalDPS := a["droneDPS"] + a["moduleDPS"]
+	if totalDPS > 0 {
+		a["totalAlphaDamage"] = totalAlpha
+		a["totalDPS"] = totalDPS
 	}
 
-	att.TotalAlpha = att.DroneAlpha + att.ModuleAlpha
-	att.TotalDPS = att.DroneDPS + att.ModuleDPS
-
-	if att.Structure.Resonance.Max > 0 && att.Armor.Resonance.Max > 0 && att.Shield.Resonance.Max > 0 {
-		att.MinEHP =
-			int64((att.Structure.Hp / att.Structure.Resonance.Max) +
-				(att.Armor.Hp / att.Armor.Resonance.Max) +
-				(att.Shield.Hp / att.Shield.Resonance.Max))
-
-		att.MaxEHP =
-			int64((att.Structure.Hp / att.Structure.Resonance.Min) +
-				(att.Armor.Hp / att.Armor.Resonance.Min) +
-				(att.Shield.Hp / att.Shield.Resonance.Min))
-
-		att.AvgEHP =
-			int64((att.Structure.Hp / att.Structure.Resonance.Avg) +
-				(att.Armor.Hp / att.Armor.Resonance.Avg) +
-				(att.Shield.Hp / att.Shield.Resonance.Avg))
-
-		att.MinRPS =
-			(att.StructureRepairPerSecond / att.Structure.Resonance.Max) +
-				(att.ArmorRepairPerSecond / att.Armor.Resonance.Max) +
-				(att.ShieldRepairPerSecond / att.Shield.Resonance.Max)
-
-		att.MaxRPS =
-			(att.StructureRepairPerSecond / att.Structure.Resonance.Min) +
-				(att.ArmorRepairPerSecond / att.Armor.Resonance.Min) +
-				(att.ShieldRepairPerSecond / att.Shield.Resonance.Min)
-
-		att.AvgRPS =
-			(att.StructureRepairPerSecond / att.Structure.Resonance.Avg) +
-				(att.ArmorRepairPerSecond / att.Armor.Resonance.Avg) +
-				(att.ShieldRepairPerSecond / att.Shield.Resonance.Avg)
-	}
-	return &att, nil
+	return att, nil
 }
 
-func (c *Context) fillAllShipAttributes(att *attributes.Attributes) error {
-	var v C.double
-
+func (c *Context) fillAllShipAttributes(a map[string]float64) error {
 	// Get all known attributes
 	for _, k := range typeAttributeMap[int32(c.shipID)] {
+		var v C.double
 		if r := C.dogma_get_ship_attribute(c.ctx, C.ushort(k), &v); r == 0 {
 			if v != 0 {
-				att.Attributes[attributeMap[k]] = float64(v)
+				a[attributeMap[k]] = float64(v)
 			}
 		}
 	}
-
 	return nil
 }
 
-func (c *Context) fillCapacitorAttributes(att *attributes.MWDAttributes) error {
-	var (
-		cap  *C.dogma_simple_capacitor_t
-		size C.size_t
-	)
-	// Get the capacitor information
-	if r := C.dogma_get_capacitor_all(c.ctx, true, &cap, &size); r != 0 {
-		return errors.New("capacitor failure")
-	}
-
-	// Should only have one capacitor on the ship
-	if size != 1 {
-		return errors.New("wrong number of capacitors")
-	}
-
-	// Get the capacitor attributes
-	att.Capacitor.Capacity = float64(cap.capacity)
-	att.Capacitor.Stable = bool(cap.stable)
-	if cap.stable {
-		att.Capacitor.Fraction = float64(C.get_cap_duration(cap))
-	} else {
-		att.Capacitor.Duration = time.Duration(C.get_cap_duration(cap) * 1000000)
-	}
-	// Release memory used for the list
-	C.dogma_free_capacitor_list(cap)
-	return nil
-}
-
-func (c *Context) fillDroneAttributes(att *attributes.Attributes) error {
+func (c *Context) fillDroneAttributes(droneList []map[string]float64) error {
 	for _, drone := range c.drones {
 		typeID := C.dogma_typeid_t(drone.typeID)
 		i := uint(0)
@@ -184,53 +127,127 @@ func (c *Context) fillDroneAttributes(att *attributes.Attributes) error {
 				C.drone_location(typeID), effect,
 				&duration, &tracking, &discharge, &optimal, &falloff, &chance,
 			)
-			m := attributes.Drone{
-				Duration:  float64(duration),
-				Tracking:  float64(tracking),
-				Discharge: float64(discharge),
-				Optimal:   float64(optimal),
-				Falloff:   float64(falloff),
-				Chance:    float64(chance),
-				TypeID:    int32(drone.typeID),
-				Quantity:  int32(drone.quantity),
+
+			m := make(map[string]float64)
+			m["typeID"] = float64(drone.typeID)
+			m["quantity"] = float64(drone.quantity)
+			if duration > 0 {
+				m["duration"] = float64(duration)
 			}
+			if tracking > 0 {
+				m["trackingSpeed"] = float64(tracking)
+			}
+			if discharge > 0 {
+				m["capacitorNeed"] = float64(discharge)
+			}
+			if optimal > 0 {
+				m["maxRange"] = float64(optimal)
+			}
+			if tracking > 0 {
+				m["falloff"] = float64(falloff)
+			}
+			if chance > 0 {
+				m["chance"] = float64(chance)
+			}
+
+			// Get all known attributes
 			var err error
-			if m.DroneBandwith, err = c.GetDroneAttribute(1272, typeID); err != nil {
-				return err
-			}
-			if m.Damage.Explosive, err = c.GetDroneAttribute(116, typeID); err != nil {
-				return err
-			}
-			if m.Damage.EM, err = c.GetDroneAttribute(114, typeID); err != nil {
-				return err
-			}
-			if m.Damage.Thermal, err = c.GetDroneAttribute(118, typeID); err != nil {
-				return err
-			}
-			if m.Damage.Kinetic, err = c.GetDroneAttribute(117, typeID); err != nil {
-				return err
+			for _, k := range typeAttributeMap[int32(drone.typeID)] {
+				var v float64
+
+				if v, err = c.GetDroneAttribute(uint16(k), typeID); err == nil {
+					if v != 0 {
+						m[attributeMap[k]] = v
+					}
+				}
 			}
 
-			if m.DamageMultiplier, err = c.GetDroneAttribute(64, typeID); err != nil {
-				return err
+			if effectIsAssistanceMap[int32(effect)] {
+				m["isAssistance"] = 1
 			}
-			if m.DamageMultiplier == 0 {
-				m.DamageMultiplier = 1
+			if sumDamage(m) > 0 {
+				if m["damageMultiplier"] == 0 {
+					m["damageMultiplier"] = 1
+				}
+				m["alphaDamage"] = m["damageMultiplier"] * sumDamage(m)
+				m["dps"] = m["alphaDamage"] / (m["duration"] / 1000)
 			}
-
-			m.AlphaDamage = m.DamageMultiplier * (m.Damage.Kinetic + m.Damage.EM + m.Damage.Explosive + m.Damage.Thermal)
-			m.DamagePerSecond = m.AlphaDamage / (m.Duration / 1000)
-
-			att.Drones = append(att.Drones, m)
+			droneList = append(droneList, m)
 		}
 	}
 
 	return nil
 }
 
-func (c *Context) optimalDroneConfiguration(att *attributes.Attributes) error {
+func sumDamage(m map[string]float64) float64 {
+	return m["explosiveDamage"] +
+		m["emDamage"] +
+		m["kineticDamage"] +
+		m["thermalDamage"]
+}
+
+func (c *Context) sumModuleAttributes(s *attributes.Attributes) error {
+	sumValues := map[string]string{
+		"dps":         "moduleDPS",
+		"alphaDamage": "moduleAlphaDamage",
+	}
+
+	minimumValues := map[string]string{
+		"speedFactor": "stasisWebifierStrength",
+	}
+
+	sumPositiveValues := map[string]string{
+		"warpScrambleStrength": "totalWarpScrambleStrength",
+	}
+
+	sumDurations := map[string]string{
+		"armorDamageAmount":       "armorDamageAmountPerSecond",
+		"structureDamageAmount":   "structureDamageAmountPerSecond",
+		"shieldBonus":             "shieldBonusAmountPerSecond",
+		"powerTransferAmount":     "powerTransferAmountPerSecond",
+		"energyNeutralizerAmount": "energyNeutralizerAmountPerSecond",
+	}
+
+	for _, m := range s.Modules {
+		for k, v := range sumValues {
+			if m[k] != 0 {
+				s.Ship[v] += m[k]
+			}
+		}
+		for k, v := range sumPositiveValues {
+			if m[k] > 0 {
+				s.Ship[v] += m[k]
+			}
+		}
+
+		for k, v := range minimumValues {
+			if m[k] < 0 && m[k] < s.Ship[v] {
+				s.Ship[v] = m[k]
+			}
+		}
+
+		for k, v := range sumDurations {
+			if m[k] != 0 && m["duration"] > 0 {
+				if m["isAssistance"] > 0 {
+					s.Ship["remote"+UcFirst(v)] += m[k] / (m["duration"] / 1000)
+				} else {
+					s.Ship[v] += m[k] / (m["duration"] / 1000)
+				}
+			}
+		}
+	}
+	return nil
+}
+func UcFirst(str string) string {
+	for i, v := range str {
+		return string(unicode.ToUpper(v)) + str[i+1:]
+	}
+	return ""
+}
+
+func (c *Context) optimalDroneConfiguration(s *attributes.Attributes) error {
 	// Early out if there is no dronebay
-	if att.DroneBandwith < 1 {
+	if s.Ship["droneBandwidth"] < 1 {
 		return nil
 	}
 
@@ -242,13 +259,13 @@ func (c *Context) optimalDroneConfiguration(att *attributes.Attributes) error {
 		used      bool
 	}
 	dc := []dcs{}
-	for _, d := range att.Drones {
-		if d.DamagePerSecond > 0 {
-			for i := int32(0); i < d.Quantity; i++ {
+	for _, d := range s.Drones {
+		if d["dps"] > 0 {
+			for i := float64(0); i < d["quantity"]; i++ {
 				dc = append(dc, dcs{
-					dps:       d.DamagePerSecond,
-					alpha:     d.AlphaDamage,
-					bandwidth: d.DroneBandwith,
+					dps:       d["dps"],
+					alpha:     d["alphaDamage"],
+					bandwidth: d["droneBandwidth"],
 				})
 			}
 		}
@@ -264,7 +281,7 @@ func (c *Context) optimalDroneConfiguration(att *attributes.Attributes) error {
 	for i := range droneSlot {
 		droneSlot[i] = &dcs{}
 	}
-	availableBandwith := att.DroneBandwith
+	availableBandwith := s.Ship["droneBandwidth"]
 	rounds := 2
 	for rounds > 0 {
 		for d := range dc {
@@ -291,43 +308,45 @@ func (c *Context) optimalDroneConfiguration(att *attributes.Attributes) error {
 		alpha += d.alpha
 	}
 
-	att.DroneDPS = dps
-	att.DroneAlpha = alpha
+	s.Ship["droneDPS"] = dps
+	s.Ship["droneAlphaDamage"] = alpha
 	return nil
 }
 
-func (c *Context) fillModuleAttributes(att *attributes.Attributes) error {
+func (c *Context) fillModuleAttributes(moduleList map[uint8]map[string]float64) error {
 	for _, mod := range c.mods {
 		typeID := C.dogma_typeid_t(mod.typeID)
 		i := uint(0)
-		var effect C.dogma_effectid_t
+		m := make(map[string]float64)
 
-		m := &attributes.Module{
-			Attributes: make(map[string]float64),
-			TypeID:     int32(mod.typeID),
-			ChargeID:   int32(mod.chargeID),
-			Location:   mod.location,
+		m["typeID"] = float64(mod.typeID)
+		if mod.chargeID > 0 {
+			m["chargeTypeID"] = float64(mod.chargeID)
 		}
-		att.Modules[uint8(mod.idx)] = m
+		m["location"] = float64(mod.location)
+
+		moduleList[uint8(mod.idx)] = m
 		var err error
 		// Get all known attributes
 		for _, k := range typeAttributeMap[int32(mod.typeID)] {
 			var v float64
 			if v, err = c.GetModuleAttribute(uint16(k), mod.idx); err == nil {
 				if v != 0 {
-					m.Attributes[attributeMap[k]] = v
+					m[attributeMap[k]] = v
 				}
 			}
 		}
+		// And the charge attributes
 		for _, k := range typeAttributeMap[int32(mod.chargeID)] {
 			var v float64
 			if v, err = c.GetChargeAttribute(uint16(k), mod.idx); err == nil {
 				if v != 0 {
-					m.Attributes[attributeMap[k]] = v
+					m[attributeMap[k]] = v
 				}
 			}
 		}
 		for {
+			var effect C.dogma_effectid_t
 			if r := C.dogma_get_nth_type_effect_with_attributes(typeID, C.uint(i), &effect); r != 0 {
 				break
 			}
@@ -342,333 +361,157 @@ func (c *Context) fillModuleAttributes(att *attributes.Attributes) error {
 				C.module_location(mod.idx), effect,
 				&duration, &tracking, &discharge, &optimal, &falloff, &chance,
 			)
-			m.Duration = float64(duration)
-			m.Tracking = float64(tracking)
-			m.Discharge = float64(discharge)
-			m.Optimal = float64(optimal)
-			m.Falloff = float64(falloff)
-			m.Chance = float64(chance)
 
-			if duration > 1e-10 && mod.chargeID > 0 {
-				// Missile Specific
-				if effect == EffectUseMissiles {
-					if m.FlightTime, err = c.GetChargeAttribute(281, mod.idx); err != nil {
-						return err
-					}
-					if m.MaxVelocity, err = c.GetChargeAttribute(37, mod.idx); err != nil {
-						return err
-					}
-					if m.DamageMultiplier, err = c.GetModuleAttribute(212, mod.idx); err != nil {
-						return err
-					}
-				}
-
-				// Bomb Specific
-				if effect == EffectEMPWave {
-					m.DamageMultiplier = 1
-				}
-				if m.DamageMultiplier == 0 {
-					if m.DamageMultiplier, err = c.GetModuleAttribute(64, mod.idx); err != nil {
-						return err
-					}
-				}
-
-				if m.Damage.Explosive, err = c.GetChargeAttribute(116, mod.idx); err != nil {
-					return err
-				}
-				if m.Damage.EM, err = c.GetChargeAttribute(114, mod.idx); err != nil {
-					return err
-				}
-				if m.Damage.Thermal, err = c.GetChargeAttribute(118, mod.idx); err != nil {
-					return err
-				}
-				if m.Damage.Kinetic, err = c.GetChargeAttribute(117, mod.idx); err != nil {
-					return err
-				}
-
-				m.AlphaDamage = m.DamageMultiplier * (m.Damage.Kinetic + m.Damage.EM + m.Damage.Explosive + m.Damage.Thermal)
-				m.DamagePerSecond = m.AlphaDamage / (m.Duration / 1000)
+			if duration > 0 {
+				m["duration"] = float64(duration)
 			}
-
-			switch effect {
-			case EffectRemoteHullRepairFalloff:
-				if m.RemoteStructureRepairAmount, err = c.GetModuleAttribute(83, mod.idx); err != nil {
-					return err
-				}
-			case EffectRemoteArmorRepairFalloff:
-				if m.RemoteArmorRepairAmount, err = c.GetModuleAttribute(84, mod.idx); err != nil {
-					return err
-				}
-			case EffectAncillaryRemoteArmorRepairer:
-				if m.RemoteArmorRepairAmount, err = c.GetModuleAttribute(84, mod.idx); err != nil {
-					return err
-				}
-			case EffectRemoteShieldTransferFalloff:
-				if m.RemoteShieldTransferAmount, err = c.GetModuleAttribute(68, mod.idx); err != nil {
-					return err
-				}
-			case EffectAncillaryRemoteShieldBooster:
-				if m.RemoteShieldTransferAmount, err = c.GetModuleAttribute(68, mod.idx); err != nil {
-					return err
-				}
-			case EffectRemoteEnergyTransfer:
-				if m.RemoteEnergyTransferAmount, err = c.GetModuleAttribute(90, mod.idx); err != nil {
-					return err
-				}
-			case EffectEnergyNeutralizerFalloff:
-				if m.NeutralizerAmount, err = c.GetModuleAttribute(97, mod.idx); err != nil {
-					return err
-				}
-			case EffectEnergyNosferatuFalloff:
-				if m.NosferatuAmount, err = c.GetModuleAttribute(90, mod.idx); err != nil {
-					return err
-				}
-
-			case EffectArmorRepair:
-				if m.ArmorRepair, err = c.GetModuleAttribute(84, mod.idx); err != nil {
-					return err
-				}
-			case EffectFueledArmorRepair:
-				if m.ArmorRepair, err = c.GetModuleAttribute(84, mod.idx); err != nil {
-					return err
-				}
-			case EffectShieldBoosting:
-				if m.ShieldRepair, err = c.GetModuleAttribute(68, mod.idx); err != nil {
-					return err
-				}
-			case EffectFueledShieldBoosting:
-				if m.ShieldRepair, err = c.GetModuleAttribute(68, mod.idx); err != nil {
-					return err
-				}
-
-			case EffectStructureRepair:
-				if m.StructureRepair, err = c.GetModuleAttribute(83, mod.idx); err != nil {
-					return err
-				}
+			if tracking > 0 {
+				m["trackingSpeed"] = float64(tracking)
 			}
-
+			if discharge > 0 {
+				m["capacitorNeed"] = float64(discharge)
+			}
+			if optimal > 0 {
+				m["maxRange"] = float64(optimal)
+			}
+			if tracking > 0 {
+				m["falloff"] = float64(falloff)
+			}
+			if chance > 0 {
+				m["chance"] = float64(chance)
+			}
+			if effectIsAssistanceMap[int32(effect)] {
+				m["isAssistance"] = 1
+			}
 		}
-	}
 
-	for _, d := range att.Modules {
-		att.ModuleDPS += d.DamagePerSecond
-		att.ModuleAlpha += d.AlphaDamage
-		if d.Duration > 0 {
-			att.RemoteArmorRepairPerSecond += d.RemoteArmorRepairAmount / (d.Duration / 1000)
-			att.RemoteShieldTransferPerSecond += d.RemoteShieldTransferAmount / (d.Duration / 1000)
-			att.RemoteStructureRepairPerSecond += d.RemoteStructureRepairAmount / (d.Duration / 1000)
-			att.RemoteEnergyTransferPerSecond += d.RemoteEnergyTransferAmount / (d.Duration / 1000)
-			att.ArmorRepairPerSecond += d.ArmorRepair / (d.Duration / 1000)
-			att.ShieldRepairPerSecond += d.ShieldRepair / (d.Duration / 1000)
-			att.StructureRepairPerSecond += d.StructureRepair / (d.Duration / 1000)
-			att.EnergyNeutralizerPerSecond += (d.NeutralizerAmount + d.NosferatuAmount) / (d.Duration / 1000)
-		}
-	}
-
-	return nil
-}
-
-func (c *Context) fillShipAttributes(att *attributes.Attributes) error {
-
-	attributes := map[string]uint16{
-		"warpSpeed":      600,
-		"maxDrones":      283,
-		"droneBandwidth": 1271,
-		"maxTargetRange": 76,
-
-		"agility": 70,
-
-		"power": 11,
-		"cpu":   48,
-
-		"scanGravimetricStrength":   211,
-		"scanLadarStrength":         209,
-		"scanMagnetometricStrength": 210,
-		"scanRadarStrength":         208,
-
-		"scanResolution":     564,
-		"shieldRechargeRate": 479,
-	}
-
-	for k, id := range attributes {
-		var (
-			v   float64
-			err error
-		)
-		if v, err = c.GetShipAttribute(id); err != nil {
-			return errors.New("Could not get attributes")
-		}
-		switch k {
-		case "warpSpeed":
-			att.WarpSpeed = float64(v)
-
-		case "maxDrones":
-			att.MaxDrones = float64(v)
-		case "droneBandwidth":
-			att.DroneBandwith = float64(v)
-		case "maxTargetRange":
-			att.MaxTargetingRange = float64(v)
-
-		case "agility":
-			att.Agility = float64(v)
-
-		case "power":
-			att.PGTotal = float64(v)
-		case "cpu":
-			att.CPUTotal = float64(v)
-
-		case "scanGravimetricStrength":
-			att.GravStrenth = float64(v)
-		case "scanLadarStrength":
-			att.LadarStrength = float64(v)
-		case "scanMagnetometricStrength":
-			att.MagStrength = float64(v)
-		case "scanRadarStrength":
-			att.RadarStrength = float64(v)
-
-		case "scanResolution":
-			att.ScanResolution = float64(v)
-		case "shieldRechargeRate":
-			att.ShieldRechargeRate = float64(v)
-
+		if sumDamage(m) > 0 {
+			if m["damageMultiplier"] == 0 {
+				m["damageMultiplier"] = 1
+			}
+			m["alphaDamage"] = m["damageMultiplier"] * sumDamage(m)
+			m["dps"] = m["alphaDamage"] / (m["duration"] / 1000)
 		}
 	}
 
 	return nil
 }
 
-func (c *Context) fillTankAttributes(att *attributes.Attributes) error {
-	resonances := map[string]uint16{
-		"ArmorEm":        267,
-		"ArmorExplosive": 268,
-		"ArmorKinetic":   269,
-		"ArmorThermal":   270,
+func (c *Context) fillTankAttributes(a map[string]float64) {
 
-		"ShieldEm":        271,
-		"ShieldExplosive": 272,
-		"ShieldKinetic":   273,
-		"ShieldThermal":   274,
-
-		"StructureEm":        113,
-		"StructureExplosive": 111,
-		"StructureKinetic":   109,
-		"StructureThermal":   110,
-
-		"ShieldCapacity": 263,
-		"ArmorHp":        265,
-		"Hp":             9,
-	}
-	for k, id := range resonances {
-		var (
-			v   float64
-			err error
-		)
-		if v, err = c.GetShipAttribute(id); err != nil {
-			return errors.New("Could not get attributes")
-		}
-		switch k {
-		case "ArmorEm":
-			att.Armor.Resonance.EM = float64(v)
-		case "ArmorExplosive":
-			att.Armor.Resonance.Explosive = float64(v)
-		case "ArmorKinetic":
-			att.Armor.Resonance.Kinetic = float64(v)
-		case "ArmorThermal":
-			att.Armor.Resonance.Thermal = float64(v)
-
-		case "ShieldEm":
-			att.Shield.Resonance.EM = float64(v)
-		case "ShieldExplosive":
-			att.Shield.Resonance.Explosive = float64(v)
-		case "ShieldKinetic":
-			att.Shield.Resonance.Kinetic = float64(v)
-		case "ShieldThermal":
-			att.Shield.Resonance.Thermal = float64(v)
-
-		case "StructureEm":
-			att.Structure.Resonance.EM = float64(v)
-		case "StructureExplosive":
-			att.Structure.Resonance.Explosive = float64(v)
-		case "StructureKinetic":
-			att.Structure.Resonance.Kinetic = float64(v)
-		case "StructureThermal":
-			att.Structure.Resonance.Thermal = float64(v)
-
-		case "ShieldCapacity":
-			att.Shield.Hp = float64(v)
-		case "ArmorHp":
-			att.Armor.Hp = float64(v)
-		case "Hp":
-			att.Structure.Hp = float64(v)
-
-		}
+	// Early out if it isn't a proper ship
+	if a["shieldEmDamageResonance"] == 0 || a["armorEmDamageResonance"] == 0 ||
+		a["hullEmDamageResonance"] == 0 {
+		return
 	}
 
-	att.Shield.Resonance.Avg = avg([]float64{
-		att.Shield.Resonance.EM,
-		att.Shield.Resonance.Explosive,
-		att.Shield.Resonance.Thermal,
-		att.Shield.Resonance.Kinetic,
+	a["shieldAvgDamageResonance"] = avg([]float64{
+		a["shieldEmDamageResonance"],
+		a["shieldExplosiveDamageResonance"],
+		a["shieldKineticDamageResonance"],
+		a["shieldThermalDamageResonance"],
 	})
 
-	att.Armor.Resonance.Avg = avg([]float64{
-		att.Armor.Resonance.EM,
-		att.Armor.Resonance.Explosive,
-		att.Armor.Resonance.Thermal,
-		att.Armor.Resonance.Kinetic,
+	a["armorAvgDamageResonance"] = avg([]float64{
+		a["armorEmDamageResonance"],
+		a["armorExplosiveDamageResonance"],
+		a["armorKineticDamageResonance"],
+		a["armorThermalDamageResonance"],
 	})
 
-	att.Structure.Resonance.Avg = avg([]float64{
-		att.Structure.Resonance.EM,
-		att.Structure.Resonance.Explosive,
-		att.Structure.Resonance.Thermal,
-		att.Structure.Resonance.Kinetic,
+	a["hullAvgDamageResonance"] = avg([]float64{
+		a["hullEmDamageResonance"],
+		a["hullExplosiveDamageResonance"],
+		a["hullKineticDamageResonance"],
+		a["hullThermalDamageResonance"],
 	})
 
-	att.Shield.Resonance.Min = min([]float64{
-		att.Shield.Resonance.EM,
-		att.Shield.Resonance.Explosive,
-		att.Shield.Resonance.Thermal,
-		att.Shield.Resonance.Kinetic,
+	a["shieldMinDamageResonance"] = min([]float64{
+		a["shieldEmDamageResonance"],
+		a["shieldExplosiveDamageResonance"],
+		a["shieldKineticDamageResonance"],
+		a["shieldThermalDamageResonance"],
 	})
 
-	att.Armor.Resonance.Min = min([]float64{
-		att.Armor.Resonance.EM,
-		att.Armor.Resonance.Explosive,
-		att.Armor.Resonance.Thermal,
-		att.Armor.Resonance.Kinetic,
+	a["armorMinDamageResonance"] = min([]float64{
+		a["armorEmDamageResonance"],
+		a["armorExplosiveDamageResonance"],
+		a["armorKineticDamageResonance"],
+		a["armorThermalDamageResonance"],
 	})
 
-	att.Structure.Resonance.Min = min([]float64{
-		att.Structure.Resonance.EM,
-		att.Structure.Resonance.Explosive,
-		att.Structure.Resonance.Thermal,
-		att.Structure.Resonance.Kinetic,
-	})
-	att.Shield.Resonance.Max = max([]float64{
-		att.Shield.Resonance.EM,
-		att.Shield.Resonance.Explosive,
-		att.Shield.Resonance.Thermal,
-		att.Shield.Resonance.Kinetic,
+	a["hullMinDamageResonance"] = min([]float64{
+		a["hullEmDamageResonance"],
+		a["hullExplosiveDamageResonance"],
+		a["hullKineticDamageResonance"],
+		a["hullThermalDamageResonance"],
 	})
 
-	att.Armor.Resonance.Max = max([]float64{
-		att.Armor.Resonance.EM,
-		att.Armor.Resonance.Explosive,
-		att.Armor.Resonance.Thermal,
-		att.Armor.Resonance.Kinetic,
+	a["shieldMaxDamageResonance"] = max([]float64{
+		a["shieldEmDamageResonance"],
+		a["shieldExplosiveDamageResonance"],
+		a["shieldKineticDamageResonance"],
+		a["shieldThermalDamageResonance"],
 	})
 
-	att.Structure.Resonance.Max = max([]float64{
-		att.Structure.Resonance.EM,
-		att.Structure.Resonance.Explosive,
-		att.Structure.Resonance.Thermal,
-		att.Structure.Resonance.Kinetic,
+	a["armorMaxDamageResonance"] = max([]float64{
+		a["armorEmDamageResonance"],
+		a["armorExplosiveDamageResonance"],
+		a["armorKineticDamageResonance"],
+		a["armorThermalDamageResonance"],
 	})
 
-	return nil
+	a["hullMaxDamageResonance"] = max([]float64{
+		a["hullEmDamageResonance"],
+		a["hullExplosiveDamageResonance"],
+		a["hullKineticDamageResonance"],
+		a["hullThermalDamageResonance"],
+	})
+
+	a["minEHP"] =
+		(a["hp"] / a["hullMaxDamageResonance"]) +
+			(a["armorHp"] / a["armorMaxDamageResonance"]) +
+			(a["shieldCapacity"] / a["shieldMaxDamageResonance"])
+
+	a["maxEHP"] =
+		(a["hp"] / a["hullMinDamageResonance"]) +
+			(a["armorHp"] / a["armorMinDamageResonance"]) +
+			(a["shieldCapacity"] / a["shieldMinDamageResonance"])
+
+	a["avgEHP"] =
+		(a["hp"] / a["hullAvgDamageResonance"]) +
+			(a["armorHp"] / a["armorAvgDamageResonance"]) +
+			(a["shieldCapacity"] / a["shieldAvgDamageResonance"])
+
+	if a["shieldRechargeRate"] > 0 {
+		rate := a["shieldRechargeRate"] / 1000
+		capacity := a["shieldCapacity"]
+		peak := 10 / rate * math.Sqrt(0.25) * (1 - math.Sqrt(0.25)) * capacity
+
+		a["minRPS"] = peak / a["shieldMaxDamageResonance"]
+		a["maxRPS"] = peak / a["shieldMinDamageResonance"]
+		a["avgRPS"] = peak / a["shieldAvgDamageResonance"]
+	}
+
+	if a["structureDamageAmountPerSecond"] > 0 || a["armorDamageAmountPerSecond"] > 0 || a["shieldBonusAmountPerSecond"] > 0 {
+		a["minRPS"] +=
+			(a["shieldBonusAmountPerSecond"] / a["hullMaxDamageResonance"]) +
+				(a["armorDamageAmountPerSecond"] / a["armorMaxDamageResonance"]) +
+				(a["shieldBonusAmountPerSecond"] / a["shieldMaxDamageResonance"])
+
+		a["maxRPS"] +=
+			(a["structureDamageAmountPerSecond"] / a["hullMinDamageResonance"]) +
+				(a["armorDamageAmountPerSecond"] / a["armorMinDamageResonance"]) +
+				(a["shieldBonusAmountPerSecond"] / a["shieldMinDamageResonance"])
+
+		a["avgRPS"] +=
+			(a["structureDamageAmountPerSecond"] / a["hullAvgDamageResonance"]) +
+				(a["armorDamageAmountPerSecond"] / a["armorAvgDamageResonance"]) +
+				(a["shieldBonusAmountPerSecond"] / a["shieldAvgDamageResonance"])
+	}
+
 }
-func (c *Context) fillMWDAffectedAttributes(att *attributes.MWDAttributes) error {
+func (c *Context) fillMWDAffectedAttributes(a map[string]float64, postfix string) error {
 	var v C.double
 	attributes := map[string]C.ushort{
 		"MaxVelocity":     37,
@@ -678,13 +521,43 @@ func (c *Context) fillMWDAffectedAttributes(att *attributes.MWDAttributes) error
 		if r := C.dogma_get_ship_attribute(c.ctx, id, &v); r != 0 {
 			return errors.New("Could not get attributes")
 		}
+
 		switch k {
 		case "MaxVelocity":
-			att.MaxVelocity = float64(v)
+			a["maxVelocity"+postfix] = float64(v)
 		case "SignatureRadius":
-			att.SignatureRadius = float64(v)
+			a["signatureRadius"+postfix] = float64(v)
 		}
 	}
+	return c.fillCapacitorAttributes(a, postfix)
+}
 
-	return c.fillCapacitorAttributes(att)
+func (c *Context) fillCapacitorAttributes(a map[string]float64, postfix string) error {
+	var (
+		cap  *C.dogma_simple_capacitor_t
+		size C.size_t
+	)
+
+	// Get the capacitor information
+	if r := C.dogma_get_capacitor_all(c.ctx, true, &cap, &size); r != 0 {
+		return errors.New("capacitor failure")
+	}
+
+	// Should only have one capacitor on the ship
+	if size != 1 {
+		return errors.New("wrong number of capacitors")
+	}
+
+	// Get the capacitor attributes
+	a["capacitorCapacity"] = float64(cap.capacity)
+	if cap.stable {
+		a["capacitorStable"+postfix] = 1
+		a["capacitorFraction"+postfix] = float64(C.get_cap_duration(cap))
+	} else {
+		a["capacitorDuration"+postfix] = float64(C.get_cap_duration(cap))
+	}
+
+	// Release memory used for the list
+	C.dogma_free_capacitor_list(cap)
+	return nil
 }
