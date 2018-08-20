@@ -16,13 +16,8 @@ import (
 	"github.com/antihax/goesi/optional"
 )
 
-type attribute struct {
-	Name string
-	ID   int32
-}
-
 var (
-	attrChan   chan attribute
+	attrChan   chan esi.GetDogmaAttributesAttributeIdOk
 	effectChan chan esi.GetDogmaEffectsEffectIdOk
 	typeChan   chan esi.GetUniverseTypesTypeIdOk
 	esiCli     *goesi.APIClient
@@ -34,7 +29,7 @@ var (
 
 func main() {
 	fmt.Printf("package dogma\n\n")
-	attrChan = make(chan attribute, 5000)
+	attrChan = make(chan esi.GetDogmaAttributesAttributeIdOk, 5000)
 	typeChan = make(chan esi.GetUniverseTypesTypeIdOk, 50000)
 	effectChan = make(chan esi.GetDogmaEffectsEffectIdOk, 50000)
 
@@ -153,13 +148,15 @@ func collectAllEffects() {
 func collectAllAttributes() {
 	ag.Add(1)
 	atts := make(map[int32]string)
+	attDisplay := make(map[int32]string)
 	for att := range attrChan {
-		atts[att.ID] = att.Name
+		atts[att.AttributeId] = att.Name
+		attDisplay[att.AttributeId] = att.DisplayName
 	}
 
 	// Dump our structure to a go file
 	fmt.Printf("var attributeMap = %#v\n", atts)
-
+	fmt.Printf("var attributeDisplayMap = %#v\n", attDisplay)
 	ag.Done()
 }
 func getEffect(a int32) {
@@ -189,7 +186,7 @@ func getAttribute(a int32) {
 		log.Fatalln(err)
 	}
 
-	attrChan <- attribute{Name: att.Name, ID: att.AttributeId}
+	attrChan <- att
 }
 
 var apiTransportLimiter chan bool

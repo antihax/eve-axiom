@@ -35,13 +35,15 @@ func TestKillmails(t *testing.T) {
 			} else {
 				assert.Nil(t, err)
 			}
-			/*	if len(r.Modules) > 0 {
-				b, err := json.MarshalIndent(r, " ", "   ")
-				fmt.Printf("%s %v\n", b, err)
-			}*/
+
+			b, err := json.MarshalIndent(r, " ", "   ")
+			ioutil.WriteFile("../pairedjson/"+f.Name(), b, 0644)
 
 			_, err = json.MarshalIndent(r, " ", "   ")
-			assert.Nil(t, err)
+			if err != nil {
+				//	log.Fatalf("%+v\n", r)
+			}
+			//assert.Nil(t, err)
 
 		}(k, f)
 	}

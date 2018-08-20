@@ -38,6 +38,7 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 
 	att.TypeID = int32(c.shipID)
 	att.Ship = make(map[string]float64)
+	att.Types = make(map[int32]string)
 	att.Modules = make(map[uint8]map[string]float64)
 	a := att.Ship
 
@@ -70,7 +71,7 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 		return nil, err
 	}
 
-	if err := c.fillDroneAttributes(att.Drones); err != nil {
+	if err := c.fillDroneAttributes(att); err != nil {
 		return nil, err
 	}
 
@@ -79,6 +80,10 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 	}
 
 	if err := c.sumModuleAttributes(att); err != nil {
+		return nil, err
+	}
+
+	if err := c.getTypeMap(att); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +115,7 @@ func (c *Context) fillAllShipAttributes(a map[string]float64) error {
 	return nil
 }
 
-func (c *Context) fillDroneAttributes(droneList []map[string]float64) error {
+func (c *Context) fillDroneAttributes(att *attributes.Attributes) error {
 	for _, drone := range c.drones {
 		typeID := C.dogma_typeid_t(drone.typeID)
 		i := uint(0)
@@ -131,6 +136,8 @@ func (c *Context) fillDroneAttributes(droneList []map[string]float64) error {
 			m := make(map[string]float64)
 			m["typeID"] = float64(drone.typeID)
 			m["quantity"] = float64(drone.quantity)
+			att.Drones = append(att.Drones, m)
+
 			if duration > 0 {
 				m["duration"] = float64(duration)
 			}
@@ -172,7 +179,7 @@ func (c *Context) fillDroneAttributes(droneList []map[string]float64) error {
 				m["alphaDamage"] = m["damageMultiplier"] * sumDamage(m)
 				m["dps"] = m["alphaDamage"] / (m["duration"] / 1000)
 			}
-			droneList = append(droneList, m)
+
 		}
 	}
 
@@ -184,6 +191,22 @@ func sumDamage(m map[string]float64) float64 {
 		m["emDamage"] +
 		m["kineticDamage"] +
 		m["thermalDamage"]
+}
+
+func (c *Context) getTypeMap(s *attributes.Attributes) error {
+	s.Types[s.TypeID] = typeMap[s.TypeID]
+
+	for _, m := range s.Modules {
+		s.Types[int32(m["typeID"])] = typeMap[int32(m["typeID"])]
+		if m["chargeTypeID"] > 0 {
+			s.Types[int32(m["chargeTypeID"])] = typeMap[int32(m["chargeTypeID"])]
+		}
+	}
+	for _, m := range s.Drones {
+		s.Types[int32(m["typeID"])] = typeMap[int32(m["typeID"])]
+	}
+
+	return nil
 }
 
 func (c *Context) sumModuleAttributes(s *attributes.Attributes) error {
@@ -397,120 +420,73 @@ func (c *Context) fillModuleAttributes(moduleList map[uint8]map[string]float64) 
 	return nil
 }
 
+// calcEHP prevents div0 errors
+func calcEHP(hp, resonance float64) float64 {
+	if resonance > 0 {
+		return hp / resonance
+	} else {
+		return hp
+	}
+}
+
 func (c *Context) fillTankAttributes(a map[string]float64) {
 
-	// Early out if it isn't a proper ship
-	if a["shieldEmDamageResonance"] == 0 || a["armorEmDamageResonance"] == 0 ||
-		a["hullEmDamageResonance"] == 0 {
-		return
-	}
+	a["shieldAvgDamageResonance"] = avg([]float64{a["shieldEmDamageResonance"], a["shieldExplosiveDamageResonance"], a["shieldKineticDamageResonance"], a["shieldThermalDamageResonance"]})
+	a["armorAvgDamageResonance"] = avg([]float64{a["armorEmDamageResonance"], a["armorExplosiveDamageResonance"], a["armorKineticDamageResonance"], a["armorThermalDamageResonance"]})
+	a["avgDamageResonance"] = avg([]float64{a["emDamageResonance"], a["explosiveDamageResonance"], a["kineticDamageResonance"], a["thermalDamageResonance"]})
 
-	a["shieldAvgDamageResonance"] = avg([]float64{
-		a["shieldEmDamageResonance"],
-		a["shieldExplosiveDamageResonance"],
-		a["shieldKineticDamageResonance"],
-		a["shieldThermalDamageResonance"],
-	})
+	a["shieldMinDamageResonance"] = min([]float64{a["shieldEmDamageResonance"], a["shieldExplosiveDamageResonance"], a["shieldKineticDamageResonance"], a["shieldThermalDamageResonance"]})
+	a["armorMinDamageResonance"] = min([]float64{a["armorEmDamageResonance"], a["armorExplosiveDamageResonance"], a["armorKineticDamageResonance"], a["armorThermalDamageResonance"]})
+	a["minDamageResonance"] = min([]float64{a["emDamageResonance"], a["explosiveDamageResonance"], a["kineticDamageResonance"], a["thermalDamageResonance"]})
 
-	a["armorAvgDamageResonance"] = avg([]float64{
-		a["armorEmDamageResonance"],
-		a["armorExplosiveDamageResonance"],
-		a["armorKineticDamageResonance"],
-		a["armorThermalDamageResonance"],
-	})
+	a["shieldMaxDamageResonance"] = max([]float64{a["shieldEmDamageResonance"], a["shieldExplosiveDamageResonance"], a["shieldKineticDamageResonance"], a["shieldThermalDamageResonance"]})
+	a["armorMaxDamageResonance"] = max([]float64{a["armorEmDamageResonance"], a["armorExplosiveDamageResonance"], a["armorKineticDamageResonance"], a["armorThermalDamageResonance"]})
+	a["maxDamageResonance"] = max([]float64{a["emDamageResonance"], a["explosiveDamageResonance"], a["kineticDamageResonance"], a["thermalDamageResonance"]})
 
-	a["hullAvgDamageResonance"] = avg([]float64{
-		a["hullEmDamageResonance"],
-		a["hullExplosiveDamageResonance"],
-		a["hullKineticDamageResonance"],
-		a["hullThermalDamageResonance"],
-	})
+	// Calculate EHP
 
-	a["shieldMinDamageResonance"] = min([]float64{
-		a["shieldEmDamageResonance"],
-		a["shieldExplosiveDamageResonance"],
-		a["shieldKineticDamageResonance"],
-		a["shieldThermalDamageResonance"],
-	})
+	a["minEHP"] += calcEHP(a["hp"], a["maxDamageResonance"])
+	a["minEHP"] += calcEHP(a["armorHp"], a["armorMaxDamageResonance"])
+	a["minEHP"] += calcEHP(a["shieldCapacity"], a["shieldMaxDamageResonance"])
 
-	a["armorMinDamageResonance"] = min([]float64{
-		a["armorEmDamageResonance"],
-		a["armorExplosiveDamageResonance"],
-		a["armorKineticDamageResonance"],
-		a["armorThermalDamageResonance"],
-	})
+	a["maxEHP"] += calcEHP(a["hp"], a["minDamageResonance"])
+	a["maxEHP"] += calcEHP(a["armorHp"], a["armorMinDamageResonance"])
+	a["maxEHP"] += calcEHP(a["shieldCapacity"], a["shieldMinDamageResonance"])
 
-	a["hullMinDamageResonance"] = min([]float64{
-		a["hullEmDamageResonance"],
-		a["hullExplosiveDamageResonance"],
-		a["hullKineticDamageResonance"],
-		a["hullThermalDamageResonance"],
-	})
+	a["avgEHP"] += calcEHP(a["hp"], a["avgDamageResonance"])
+	a["avgEHP"] += calcEHP(a["armorHp"], a["armorAvgDamageResonance"])
+	a["avgEHP"] += calcEHP(a["shieldCapacity"], a["shieldAvgDamageResonance"])
 
-	a["shieldMaxDamageResonance"] = max([]float64{
-		a["shieldEmDamageResonance"],
-		a["shieldExplosiveDamageResonance"],
-		a["shieldKineticDamageResonance"],
-		a["shieldThermalDamageResonance"],
-	})
-
-	a["armorMaxDamageResonance"] = max([]float64{
-		a["armorEmDamageResonance"],
-		a["armorExplosiveDamageResonance"],
-		a["armorKineticDamageResonance"],
-		a["armorThermalDamageResonance"],
-	})
-
-	a["hullMaxDamageResonance"] = max([]float64{
-		a["hullEmDamageResonance"],
-		a["hullExplosiveDamageResonance"],
-		a["hullKineticDamageResonance"],
-		a["hullThermalDamageResonance"],
-	})
-
-	a["minEHP"] =
-		(a["hp"] / a["hullMaxDamageResonance"]) +
-			(a["armorHp"] / a["armorMaxDamageResonance"]) +
-			(a["shieldCapacity"] / a["shieldMaxDamageResonance"])
-
-	a["maxEHP"] =
-		(a["hp"] / a["hullMinDamageResonance"]) +
-			(a["armorHp"] / a["armorMinDamageResonance"]) +
-			(a["shieldCapacity"] / a["shieldMinDamageResonance"])
-
-	a["avgEHP"] =
-		(a["hp"] / a["hullAvgDamageResonance"]) +
-			(a["armorHp"] / a["armorAvgDamageResonance"]) +
-			(a["shieldCapacity"] / a["shieldAvgDamageResonance"])
-
+	// Deal with shield recharge
 	if a["shieldRechargeRate"] > 0 {
 		rate := a["shieldRechargeRate"] / 1000
 		capacity := a["shieldCapacity"]
 		peak := 10 / rate * math.Sqrt(0.25) * (1 - math.Sqrt(0.25)) * capacity
 
-		a["minRPS"] = peak / a["shieldMaxDamageResonance"]
-		a["maxRPS"] = peak / a["shieldMinDamageResonance"]
-		a["avgRPS"] = peak / a["shieldAvgDamageResonance"]
+		a["minRPS"] += calcEHP(peak, a["shieldMaxDamageResonance"])
+		a["maxRPS"] += calcEHP(peak, a["shieldMinDamageResonance"])
+		a["avgRPS"] += calcEHP(peak, a["shieldAvgDamageResonance"])
+
 	}
 
-	if a["structureDamageAmountPerSecond"] > 0 || a["armorDamageAmountPerSecond"] > 0 || a["shieldBonusAmountPerSecond"] > 0 {
-		a["minRPS"] +=
-			(a["shieldBonusAmountPerSecond"] / a["hullMaxDamageResonance"]) +
-				(a["armorDamageAmountPerSecond"] / a["armorMaxDamageResonance"]) +
-				(a["shieldBonusAmountPerSecond"] / a["shieldMaxDamageResonance"])
-
-		a["maxRPS"] +=
-			(a["structureDamageAmountPerSecond"] / a["hullMinDamageResonance"]) +
-				(a["armorDamageAmountPerSecond"] / a["armorMinDamageResonance"]) +
-				(a["shieldBonusAmountPerSecond"] / a["shieldMinDamageResonance"])
-
-		a["avgRPS"] +=
-			(a["structureDamageAmountPerSecond"] / a["hullAvgDamageResonance"]) +
-				(a["armorDamageAmountPerSecond"] / a["armorAvgDamageResonance"]) +
-				(a["shieldBonusAmountPerSecond"] / a["shieldAvgDamageResonance"])
+	// Local repair systems
+	if a["structureDamageAmountPerSecond"] > 0 {
+		a["minRPS"] += calcEHP(a["structureDamageAmountPerSecond"], a["maxDamageResonance"])
+		a["maxRPS"] += calcEHP(a["structureDamageAmountPerSecond"], a["minDamageResonance"])
+		a["avgRPS"] += calcEHP(a["structureDamageAmountPerSecond"], a["avgDamageResonance"])
 	}
-
+	if a["armorDamageAmountPerSecond"] > 0 {
+		a["minRPS"] += calcEHP(a["armorDamageAmountPerSecond"], a["armorMaxDamageResonance"])
+		a["maxRPS"] += calcEHP(a["armorDamageAmountPerSecond"], a["armorMinDamageResonance"])
+		a["avgRPS"] += calcEHP(a["armorDamageAmountPerSecond"], a["armorAvgDamageResonance"])
+	}
+	if a["shieldBonusAmountPerSecond"] > 0 {
+		a["minRPS"] += calcEHP(a["shieldBonusAmountPerSecond"], a["shieldMaxDamageResonance"])
+		a["maxRPS"] += calcEHP(a["shieldBonusAmountPerSecond"], a["shieldMinDamageResonance"])
+		a["avgRPS"] += calcEHP(a["shieldBonusAmountPerSecond"], a["shieldAvgDamageResonance"])
+	}
 }
+
 func (c *Context) fillMWDAffectedAttributes(a map[string]float64, postfix string) error {
 	var v C.double
 	attributes := map[string]C.ushort{
