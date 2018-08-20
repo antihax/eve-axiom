@@ -36,14 +36,14 @@ func TestKillmails(t *testing.T) {
 				assert.Nil(t, err)
 			}
 
-			b, err := json.MarshalIndent(r, " ", "   ")
-			ioutil.WriteFile("../pairedjson/"+f.Name(), b, 0644)
+			/*b, err := json.MarshalIndent(r, " ", "   ")
+			ioutil.WriteFile("../pairedjson/"+f.Name(), b, 0644)*/
 
 			_, err = json.MarshalIndent(r, " ", "   ")
-			if err != nil {
-				//	log.Fatalf("%+v\n", r)
-			}
-			//assert.Nil(t, err)
+			/*if err != nil {
+					log.Fatalf("%+v\n", r)
+			}*/
+			assert.Nil(t, err)
 
 		}(k, f)
 	}
