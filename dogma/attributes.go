@@ -24,6 +24,7 @@ package dogma
 import "C"
 import (
 	"errors"
+	"fmt"
 	"math"
 	"unicode"
 
@@ -288,7 +289,7 @@ func (c *Context) optimalDroneConfiguration(s *attributes.Attributes) error {
 				dc = append(dc, dcs{
 					dps:       d["dps"],
 					alpha:     d["alphaDamage"],
-					bandwidth: d["droneBandwidth"],
+					bandwidth: d["droneBandwidthUsed"],
 				})
 			}
 		}
@@ -305,20 +306,23 @@ func (c *Context) optimalDroneConfiguration(s *attributes.Attributes) error {
 		droneSlot[i] = &dcs{}
 	}
 	availableBandwith := s.Ship["droneBandwidth"]
+
 	rounds := 2
 	for rounds > 0 {
 		for d := range dc {
 			for i := range droneSlot {
 				// Is this is a better unused drone and we have room?
-				if !dc[d].used && dc[d].dps > droneSlot[i].dps &&
-					availableBandwith+(droneSlot[i].bandwidth-dc[d].bandwidth) >= 0 {
-					// Recalculate Bandwidth
-					availableBandwith += droneSlot[i].bandwidth - dc[d].bandwidth
-					// swap the drone in the slot
-					droneSlot[i].used = false
-					dc[d].used = true
-					droneSlot[i] = &dc[d]
-					break // don't fill with the same drone
+				if !dc[d].used && dc[d].dps > droneSlot[i].dps {
+					if availableBandwith+(droneSlot[i].bandwidth-dc[d].bandwidth) >= 0 {
+						// Recalculate Bandwidth swapping this drone out
+						availableBandwith += droneSlot[i].bandwidth - dc[d].bandwidth
+			
+						// swap the drone in the slot
+						droneSlot[i].used = false
+						dc[d].used = true
+						droneSlot[i] = &dc[d]
+						break // don't fill with the same drone
+					}
 				}
 			}
 		}
