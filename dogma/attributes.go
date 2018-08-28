@@ -24,7 +24,6 @@ package dogma
 import "C"
 import (
 	"errors"
-	"fmt"
 	"math"
 	"unicode"
 
@@ -262,6 +261,7 @@ func (c *Context) sumModuleAttributes(s *attributes.Attributes) error {
 	}
 	return nil
 }
+
 func UcFirst(str string) string {
 	for i, v := range str {
 		return string(unicode.ToUpper(v)) + str[i+1:]
@@ -316,7 +316,7 @@ func (c *Context) optimalDroneConfiguration(s *attributes.Attributes) error {
 					if availableBandwith+(droneSlot[i].bandwidth-dc[d].bandwidth) >= 0 {
 						// Recalculate Bandwidth swapping this drone out
 						availableBandwith += droneSlot[i].bandwidth - dc[d].bandwidth
-			
+
 						// swap the drone in the slot
 						droneSlot[i].used = false
 						dc[d].used = true
