@@ -65,8 +65,7 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 			return nil, err
 		}
 	}
-	c.fillTankAttributes(a)
-
+	
 	if err := c.fillModuleAttributes(att.Modules); err != nil {
 		return nil, err
 	}
@@ -82,7 +81,9 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 	if err := c.sumModuleAttributes(att); err != nil {
 		return nil, err
 	}
-
+	
+	c.fillTankAttributes(a)
+	
 	if err := c.getTypeMap(att); err != nil {
 		return nil, err
 	}
