@@ -110,7 +110,7 @@ func (c *Context) AddModule(t uint32, location int32) (C.dogma_key_t, error) {
 		c.mwd = i
 	}
 
-	// Find any MWD and store
+	// Find any afterburner and store
 	if r := C.dogma_type_has_effect(C.dogma_typeid_t(t), StateActive, C.dogma_effectid_t(6731), &hasit); r != 0 {
 		return 0, errors.New("failed to add module")
 	}
@@ -244,7 +244,7 @@ func (c *Context) ActivateAllModules() error {
 	// Turn off AB
 	if c.ab > 0 {
 		if r := C.dogma_set_module_state(c.ctx, c.ab, StateOnline); r != 0 {
-			return errors.New("failed deactivating microwarp drive")
+			return errors.New("failed deactivating Afterburner")
 		}
 	}
 
