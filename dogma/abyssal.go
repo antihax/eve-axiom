@@ -70,6 +70,18 @@ func SwapAbyssal(typeID int32) int32 {
 		return 20353 // Large Abyssal Armor Plates
 	case 48439:
 		return 3504 // Large Cap Battery
+	case 48419:
+		return 13001 // Small Nos
+	case 48423:
+		return 12259 // Medium nos
+	case 48427:
+		return 12263 // heavy nos
+	case 47844:
+		return 33101 // medium ancil armor
+	case 47846:
+		return 33103 // large ancil armor
+	case 47842:
+		return 33076 // small ancil armor
 	}
 	return typeID
 }
