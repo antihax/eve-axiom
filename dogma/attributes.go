@@ -65,7 +65,7 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 			return nil, err
 		}
 	}
-	
+
 	if err := c.fillModuleAttributes(att.Modules); err != nil {
 		return nil, err
 	}
@@ -81,9 +81,9 @@ func (c *Context) GetAttributes() (*attributes.Attributes, error) {
 	if err := c.sumModuleAttributes(att); err != nil {
 		return nil, err
 	}
-	
+
 	c.fillTankAttributes(a)
-	
+
 	if err := c.getTypeMap(att); err != nil {
 		return nil, err
 	}
@@ -449,17 +449,16 @@ func (c *Context) fillTankAttributes(a map[string]float64) {
 	a["maxDamageResonance"] = max([]float64{a["emDamageResonance"], a["explosiveDamageResonance"], a["kineticDamageResonance"], a["thermalDamageResonance"]})
 
 	// Calculate EHP
-
 	a["minEHP"] += calcEHP(a["hp"], a["maxDamageResonance"])
-	a["minEHP"] += calcEHP(a["armorHp"], a["armorMaxDamageResonance"])
+	a["minEHP"] += calcEHP(a["armorHP"], a["armorMaxDamageResonance"])
 	a["minEHP"] += calcEHP(a["shieldCapacity"], a["shieldMaxDamageResonance"])
 
 	a["maxEHP"] += calcEHP(a["hp"], a["minDamageResonance"])
-	a["maxEHP"] += calcEHP(a["armorHp"], a["armorMinDamageResonance"])
+	a["maxEHP"] += calcEHP(a["armorHP"], a["armorMinDamageResonance"])
 	a["maxEHP"] += calcEHP(a["shieldCapacity"], a["shieldMinDamageResonance"])
 
 	a["avgEHP"] += calcEHP(a["hp"], a["avgDamageResonance"])
-	a["avgEHP"] += calcEHP(a["armorHp"], a["armorAvgDamageResonance"])
+	a["avgEHP"] += calcEHP(a["armorHP"], a["armorAvgDamageResonance"])
 	a["avgEHP"] += calcEHP(a["shieldCapacity"], a["shieldAvgDamageResonance"])
 
 	// Deal with shield recharge
